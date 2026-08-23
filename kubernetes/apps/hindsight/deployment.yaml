@@ -72,6 +72,7 @@ spec:
             # --- embeddings + reranker stay local (defaults); cache on the PVC ---
             - { name: HF_HOME, value: "/home/hindsight/.pg0/hf" }
             - { name: HINDSIGHT_API_LOG_LEVEL, value: "info" }
+            - { name: HINDSIGHT_API_AUDIT_LOG_ENABLED, value: "true" }
           volumeMounts:
             - { name: data, mountPath: /home/hindsight/.pg0 }
           startupProbe:
