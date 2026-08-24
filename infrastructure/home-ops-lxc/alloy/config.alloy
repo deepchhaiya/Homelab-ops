@@ -37,3 +37,28 @@ loki.write "central" {
     host = "peladn",
   }
 }
+
+local.file_match "npm_access" {
+  path_targets = [
+    {"__path__" = "/var/lib/npm/data/logs/proxy-host-*_access.log", "job" = "npm_access"},
+  ]
+}
+
+loki.process "npm_access" {
+  forward_to = [loki.write.central.receiver]
+
+  stage.regex {
+    expression = `^\[(?P<timestamp>[^\]]+)\] - \S+ (?P<status>\d+) \S+ (?P<method>\S+) (?P<scheme>\S+) (?P<domain>\S+) "(?P<path>[^"]*)"`
+  }
+  stage.labels {
+    values = {
+      domain = "",
+      status = "",
+    }
+  }
+}
+
+loki.source.file "npm_access" {
+  targets    = local.file_match.npm_access.targets
+  forward_to = [loki.process.npm_access.receiver]
+}
