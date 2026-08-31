@@ -1,0 +1,410 @@
+{
+  "name": "miniflux-curator",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "meta": {},
+  "pinData": {},
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7-21/3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Every 3h (07-21)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MINIFLUX_URL }}/v1/entries?status=unread&direction=asc&limit=60",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Auth-Token",
+              "value": "={{ $env.MINIFLUX_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Miniflux: get unread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// runOnceForAllItems: turn the Miniflux entries array into one item per entry,\n// each carrying the system prompt + the user message for Ollama.\n// The real reader profile is injected via the CURATOR_PROFILE env var (from the\n// SOPS secret) so nothing personal lives in this workflow JSON. Falls back to a\n// generic prompt if the env var is unset.\nconst res = $input.first().json;\nconst entries = Array.isArray(res.entries) ? res.entries : [];\n\nconst GENERIC = \"You are a feed-triage assistant. Score each article 0-10 on how much it advances the reader's goals, then put it in one bucket.\\n\\nREADER (generic fallback - the real profile is injected from CURATOR_PROFILE)\\nInterested in: applied AI / LLM engineering, cloud and object storage, Kubernetes and inference infrastructure, and self-hosting. Favour hands-on engineering depth and things worth writing about; discount news, funding and product announcements.\\n\\nSCORE 0-10 ON GOAL LEVERAGE, NOT GENERAL INTEREST\\n9-10  Deep how-it-works pieces the reader could reproduce, primary-source case studies, strong signal for the target field.\\n7-8   Strongly relevant engineering patterns, techniques on the learning path, or a clear angle the reader could write about.\\n5-6   Tangentially useful: general platform/SRE/cost content, a technique that could become a writeup, broad industry news with a concrete takeaway.\\n2-4   Low: generic tech news, announcements with no engineering substance.\\n0-1   Noise: unrelated, clickbait, marketing, duplicate-feeling.\\n\\nBUCKETS (pick one): career | applied-ai | infra | storage | homelab | noise\\n\\nOUTPUT\\nReturn ONLY a JSON object, no prose, no code fence:\\n{\\\"score\\\": <int 0-10>, \\\"bucket\\\": \\\"<one bucket>\\\", \\\"why\\\": \\\"<=25 words>\\\", \\\"publish_angle\\\": \\\"<a post title the reader could write, or empty string>\\\"}\";\nconst envP = ($env.CURATOR_PROFILE || '').trim();\nconst PROFILE = envP.length > 40 ? envP : GENERIC;\n\nreturn entries.map((e) => {\n  const html = e.content || e.summary || '';\n  const text = String(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\s+/g, ' ').trim().slice(0, 1400);\n  const feed = (e.feed && e.feed.title) || '';\n  const category = (e.feed && e.feed.category && e.feed.category.title) || '';\n  const userMsg = `TITLE: ${e.title}\\nFEED: ${feed}\\nMINIFLUX_CATEGORY: ${category}\\nAUTHOR: ${e.author || ''}\\nURL: ${e.url}\\nPUBLISHED: ${e.published_at || ''}\\n\\nEXCERPT:\\n${text || '(no excerpt)'}`;\n  return { json: { id: e.id, title: e.title, url: e.url, feed, category, sysPrompt: PROFILE, userMsg } };\n});\n"
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Prep entries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_URL }}/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: ($env.OLLAMA_MODEL || 'qwen3:4b-instruct'), stream: false, format: 'json', keep_alive: '30m', options: { temperature: 0.1, num_ctx: 8192 }, messages: [ { role: 'system', content: $json.sysPrompt }, { role: 'user', content: $json.userMsg } ] } }}",
+        "options": {
+          "timeout": 120000,
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Ollama: score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -580,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Merge orig + score",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// runOnceForEachItem: parse the model verdict, apply thresholds,\n// quiet hours (22:00-07:30 America/Chicago) and a daily push cap.\nconst j = $json;\nlet v = {};\ntry { v = JSON.parse((j.message && j.message.content) || '{}'); }\ncatch (e) { v = { score: 0, bucket: 'noise', why: 'model returned non-JSON', publish_angle: '' }; }\n\nlet score = Math.round(Number(v.score));\nif (!Number.isFinite(score)) score = 0;\nscore = Math.max(0, Math.min(10, score));\nconst bucket = String(v.bucket || 'noise');\nconst why = String(v.why || '').slice(0, 240);\nconst angle = String(v.publish_angle || '').slice(0, 240);\n\nlet action = 'skip';\nif (score >= 8) action = 'notify';\nelse if (score >= 6) action = 'star';\n\nconst now = DateTime.now().setZone('America/Chicago');\nconst hm = now.hour + now.minute / 60;\nconst quiet = (hm >= 22 || hm < 7.5);\n\nconst sd = $getWorkflowStaticData('global');\nconst today = now.toFormat('yyyy-LL-dd');\nif (sd.capDate !== today) { sd.capDate = today; sd.capCount = 0; }\nconst DAILY_CAP = 6;\n\nif (action === 'notify') {\n  if (quiet || (sd.capCount || 0) >= DAILY_CAP) action = 'star';\n  else sd.capCount = (sd.capCount || 0) + 1;\n}\n\nconst emoji = ({ 'career': '\\uD83C\\uDFAF', 'storage': '\\uD83D\\uDDC4\\uFE0F', 'infra': '\\u2699\\uFE0F', 'applied-ai': '\\uD83E\\uDD16', 'homelab': '\\uD83C\\uDFE0', 'noise': '\\u00B7' })[bucket] || '\\u2022';\nconst gotifyPriority = score >= 9 ? 8 : 6;\nconst gotifyTitle = `${emoji} [${score}] ${j.feed || ''}`.slice(0, 120);\nlet gotifyMessage = `**${j.title}**\\n\\n${why}`;\nif (angle) gotifyMessage += `\\n\\n\\u270D\\uFE0F Post angle: ${angle}`;\ngotifyMessage += `\\n\\n${j.url}`;\n\nreturn { json: { id: j.id, url: j.url, title: j.title, feed: j.feed, category: j.category, score, bucket, why, publish_angle: angle, action, gotifyPriority, gotifyTitle, gotifyMessage } };\n"
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "notify",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "notify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "star",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "star",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "skip",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "skip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "notify / star / skip",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOTIFY_URL }}/message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Gotify-Key",
+              "value": "={{ $env.GOTIFY_CURATOR_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { title: $json.gotifyTitle, message: $json.gotifyMessage, priority: $json.gotifyPriority, extras: { 'client::display': { contentType: 'text/markdown' }, 'client::notification': { click: { url: $json.url } } } } }}",
+        "options": {}
+      },
+      "id": "88888888-8888-8888-8888-888888888888",
+      "name": "Gotify push",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.MINIFLUX_URL }}/v1/entries/{{ $json.id }}/bookmark",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Auth-Token",
+              "value": "={{ $env.MINIFLUX_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "99999999-9999-9999-9999-999999999999",
+      "name": "Miniflux: star",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.MINIFLUX_URL }}/v1/entries",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Auth-Token",
+              "value": "={{ $env.MINIFLUX_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { entry_ids: [ $json.id ], status: 'read' } }}",
+        "options": {}
+      },
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "Miniflux: mark read",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Every 3h (07-21)": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: get unread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Miniflux: get unread": {
+      "main": [
+        [
+          {
+            "node": "Prep entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep entries": {
+      "main": [
+        [
+          {
+            "node": "Ollama: score",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge orig + score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama: score": {
+      "main": [
+        [
+          {
+            "node": "Merge orig + score",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge orig + score": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "notify / star / skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "notify / star / skip": {
+      "main": [
+        [
+          {
+            "node": "Gotify push",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Miniflux: star",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Miniflux: mark read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gotify push": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: star",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Miniflux: star": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: mark read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

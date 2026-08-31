@@ -1,0 +1,100 @@
+feed_url,category,keeplist_rules
+# Desired-state feed list for Miniflux. 2 or 3 fields per line:
+#   feed_url,category[,keeplist_regex]
+# The 3rd field (optional) is a Miniflux keep-list regex applied to the entry
+# title at ingest — non-matching entries are dropped before the AI scorer sees
+# them. It may contain '|' '(' ')' etc but NOT commas. Everything after the 2nd
+# comma is the regex, so internal spaces are fine.
+#
+# add-feeds.sh subscribes + creates categories + applies per-feed hygiene
+# (browser UA + disable_http2 for reddit, keeplist_rules from column 3), and
+# re-syncs hygiene on feeds that already exist.
+# recategorize.sh moves already-subscribed feeds to the right category and (with
+# --apply) applies the same hygiene.
+#
+# ─────────────────────────── Career-FDE ───────────────────────────
+https://newsletter.pragmaticengineer.com/feed,Career-FDE
+https://blog.pragmaticengineer.com/rss/,Career-FDE
+https://fdehub.substack.com/feed,Career-FDE
+https://newsletter.gtmengineering.ai/feed,Career-FDE
+https://bloomberry.com/,Career-FDE
+https://www.svpg.com/feed/,Career-FDE
+# ─────────────────────── Applied-AI-Agents ────────────────────────
+https://www.latent.space/feed,Applied-AI-Agents
+https://simonwillison.net/atom/everything/,Applied-AI-Agents
+https://www.reddit.com/r/LocalLLaMA/top.rss?t=week&limit=40,Applied-AI-Agents,(?i)(vllm|sglang|llama\.cpp|serve|serving|kv.?cache|quant|throughput|benchmark|deploy|production|agent|eval|rag|fine.?tun|inference|context window|rocm|cuda|multi.?gpu)
+https://bullrich.dev/tldr-rss/ai.rss,Applied-AI-Agents
+https://eugeneyan.com/rss/,Applied-AI-Agents
+https://hamel.dev/index.xml,Applied-AI-Agents
+https://huyenchip.com/feed.xml,Applied-AI-Agents
+https://lilianweng.github.io/index.xml,Applied-AI-Agents
+https://jxnl.co/feed_rss_created.xml,Applied-AI-Agents
+https://blog.langchain.dev/,Applied-AI-Agents
+https://openai.com/news/rss.xml,Applied-AI-Agents
+https://huggingface.co/blog/feed.xml,Applied-AI-Agents
+https://deepmind.google/blog/feed/basic/,Applied-AI-Agents
+# ────────────────────── AI-Infra-Inference ───────────────────────
+https://vllm.ai/blog/rss.xml,AI-Infra-Inference
+https://www.aleksagordic.com/blog,AI-Infra-Inference
+https://modal.com/blog,AI-Infra-Inference
+https://www.baseten.co/blog,AI-Infra-Inference
+https://kubernetes.io/feed.xml,AI-Infra-Inference
+https://www.cncf.io/feed/,AI-Infra-Inference
+https://lwkd.info/feed.xml,AI-Infra-Inference
+https://github.com/ggml-org/llama.cpp/releases.atom,AI-Infra-Inference
+https://github.com/vllm-project/vllm/releases.atom,AI-Infra-Inference
+https://github.com/ollama/ollama/releases.atom,AI-Infra-Inference
+https://www.semianalysis.com/feed,AI-Infra-Inference
+# ────────────────────── Object-Storage-Data ──────────────────────
+https://aws.amazon.com/blogs/storage/feed/,Object-Storage-Data
+https://aws.amazon.com/about-aws/whats-new/recent/feed/,Object-Storage-Data,(?i)(s3|storage|glacier|backup|snowball|datasync|efs|fsx|lake formation|athena)
+https://blog.cloudflare.com/rss/,Object-Storage-Data
+https://www.backblaze.com/blog/feed/,Object-Storage-Data
+https://min.io/blog,Object-Storage-Data
+https://ceph.io/en/news/blog/,Object-Storage-Data
+https://github.com/seaweedfs/seaweedfs/releases.atom,Object-Storage-Data
+https://www.warpstream.com/blog/rss.xml,Object-Storage-Data
+https://www.reddit.com/r/aws/top.rss?t=week&limit=40,Object-Storage-Data,(?i)(s3|storage|glacier|backup|athena|lake|egress|lambda|eks|outpost|snowball|datasync)
+https://bullrich.dev/tldr-rss/data.rss,Object-Storage-Data
+# ──────────────────────── Cloud-DevOps ───────────────────────────
+https://aws.amazon.com/blogs/aws/feed/,Cloud-DevOps
+https://azure.microsoft.com/en-us/blog/feed/,Cloud-DevOps
+https://thenewstack.io/feed/,Cloud-DevOps
+https://stackfeed.io/feed/,Cloud-DevOps
+https://bullrich.dev/tldr-rss/devops.rss,Cloud-DevOps
+https://www.reddit.com/r/kubernetes/top.rss?t=week&limit=40,Cloud-DevOps
+# ──────────────────────── Homelab-K8s ────────────────────────────
+https://www.reddit.com/r/selfhosted/top.rss?t=week&limit=40,Homelab-K8s,(?i)(kubernetes|k8s|proxmox|talos|ceph|zfs|gpu|llm|inference|s3|minio|object stor|backup|terraform|ansible|monitoring|observability|automation|reverse proxy|self.?host)
+https://www.reddit.com/r/homelab/top.rss?t=week&limit=40,Homelab-K8s,(?i)(kubernetes|k8s|proxmox|talos|ceph|zfs|gpu|llm|inference|s3|minio|object stor|10 ?gbe|nvme|backup|terraform|ansible|monitoring|observability)
+https://www.reddit.com/r/Proxmox/top.rss?t=week&limit=40,Homelab-K8s,(?i)(gpu|passthrough|ceph|zfs|cluster|backup|pbs|sr.?iov|vfio|network|10 ?gbe|nvme|migration|\bha\b|terraform|ansible)
+https://feeds.feedburner.com/ServethehomecomForums,Homelab-K8s
+https://tailscale.com/blog/index.xml,Homelab-K8s
+https://fly.io/blog/feed.xml,Homelab-K8s
+https://selfh.st/rss/,Homelab-K8s
+https://www.jeffgeerling.com/blog.xml,Homelab-K8s
+# ──────────────────────── Security-SRE ───────────────────────────
+https://hnrss.org/newest?q=postmortem&points=40,Security-SRE
+https://hnrss.org/newest?q=CVE&points=80,Security-SRE
+https://hnrss.org/newest?q=kubernetes+security&points=25,Security-SRE
+https://rachelbythebay.com/w/atom.xml,Security-SRE
+https://danluu.com/atom.xml,Security-SRE
+https://www.brendangregg.com/blog/rss.xml,Security-SRE
+# ──────────────────────── HN-Trending ────────────────────────────
+https://hnrss.org/frontpage?points=150,HN-Trending,(?i)(kubernetes|k8s|s3|object stor|storage|inference|vllm|llm|gpu|rag|agent|postmortem|outage|latency|scaling|distributed|database|self.?host|homelab|proxmox|ceph|aws|cloud|sre|observability|forward deployed|solutions engineer)
+https://hnrss.org/newest?q=%22forward+deployed%22,HN-Trending
+https://hnrss.org/newest?q=%22solutions+engineer%22,HN-Trending
+https://hnrss.org/newest?q=vLLM&points=30,HN-Trending
+https://hnrss.org/newest?q=inference&points=100,HN-Trending
+https://hnrss.org/newest?q=%22object+storage%22&points=30,HN-Trending
+https://hnrss.org/newest?q=S3&points=120,HN-Trending
+https://hnrss.org/newest?q=Kubernetes&points=150,HN-Trending
+https://hnrss.org/newest?q=RAG&points=75,HN-Trending
+https://hnrss.org/newest?q=Anthropic&points=100,HN-Trending
+https://hnrss.org/newest?q=agents&points=150,HN-Trending
+# ────────────────────────── Digests ─────────────────────────────
+https://bullrich.dev/tldr-rss/tech.rss,Digests
+https://bullrich.dev/tldr-rss/design.rss,Digests
+# ─────────────────────────── Deals ──────────────────────────────
+https://slickdeals.net/newsearch.php?mode=popdeals&searcharea=deals&searchin=first&rss=1,Deals
+https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1,Deals
+https://feeds.feedburner.com/servethehome/dWoS,Deals

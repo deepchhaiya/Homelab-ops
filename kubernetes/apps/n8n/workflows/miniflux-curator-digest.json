@@ -1,0 +1,164 @@
+{
+  "name": "miniflux-curator-digest",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "saveDataSuccessExecution": "all"
+  },
+  "meta": {},
+  "pinData": {},
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "b1111111-1111-1111-1111-111111111111",
+      "name": "Sundays 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MINIFLUX_URL }}/v1/entries?starred=true&direction=desc&limit=100&published_after={{ Math.floor(Date.now()/1000) - 604800 }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Auth-Token",
+              "value": "={{ $env.MINIFLUX_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "b2222222-2222-2222-2222-222222222222",
+      "name": "Miniflux: starred last 7d",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -580,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst ents = Array.isArray(res.entries) ? res.entries : [];\nconst list = ents.map((e, i) => {\n  const cat = (e.feed && e.feed.category && e.feed.category.title) || '-';\n  const feed = (e.feed && e.feed.title) || '';\n  return `${i + 1}. [${cat}] ${e.title} \\u2014 ${feed}\\n   ${e.url}`;\n}).join('\\n');\n\nconst GENERIC_SYS = `You are the reader's research chief of staff. Their detailed profile is injected at runtime. Given the list of articles the reader starred this week, produce concise markdown with exactly these sections:\\n## Top 5 reads  (ranked, one line each: what it is + why it matters to their goals; pick from the list only)\\n## 3 post angles  (each: a specific title, 2 bullet outline, which of their skills/assets it leverages; bias to weekend-sized)\\n## Market signal  (one hiring / comp / tech-shift observation worth acting on)\\n## Weekend lab project  (one <1 weekend project that would give interview-defensible depth)`;\nconst envS = ($env.CURATOR_DIGEST_PROFILE || '').trim();\nconst sys = envS.length > 40 ? envS : GENERIC_SYS;\n\nconst user = ents.length\n  ? `Articles the reader starred this week (${ents.length}):\\n\\n${list}`\n  : `Nothing was starred this week. Use the reader's standing themes from the profile above to still produce all four sections.`;\n\nreturn [{ json: { sysPrompt: sys, userMsg: user, count: ents.length } }];\n"
+      },
+      "id": "b3333333-3333-3333-3333-333333333333",
+      "name": "Build digest prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_DIGEST_URL || $env.OLLAMA_URL }}/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: ($env.OLLAMA_DIGEST_MODEL || 'qwen3:14b'), stream: false, keep_alive: '10m', options: { temperature: 0.4, num_ctx: 16384 }, messages: [ { role: 'system', content: $json.sysPrompt }, { role: 'user', content: $json.userMsg } ] } }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "b4444444-4444-4444-4444-444444444444",
+      "name": "Ollama: synthesize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOTIFY_URL }}/message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Gotify-Key",
+              "value": "={{ $env.GOTIFY_CURATOR_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { title: '\\uD83D\\uDCF0 Weekly feed digest', message: (($json.message && $json.message.content) || 'no content'), priority: 5, extras: { 'client::display': { contentType: 'text/markdown' } } } }}",
+        "options": {}
+      },
+      "id": "b5555555-5555-5555-5555-555555555555",
+      "name": "Gotify: digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        80,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Sundays 08:00": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: starred last 7d",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Miniflux: starred last 7d": {
+      "main": [
+        [
+          {
+            "node": "Build digest prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest prompt": {
+      "main": [
+        [
+          {
+            "node": "Ollama: synthesize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama: synthesize": {
+      "main": [
+        [
+          {
+            "node": "Gotify: digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

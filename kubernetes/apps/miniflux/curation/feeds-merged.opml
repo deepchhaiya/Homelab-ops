@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0" xmlns:miniflux="https://miniflux.app/opml">
+    <head>
+        <title>Miniflux — merged + Phase 29 curation</title>
+        <dateCreated>Sun, 31 Aug 2026 00:00:00 UTC</dateCreated>
+    </head>
+    <body>
+        <outline text="Career-FDE">
+            <outline title="The Pragmatic Engineer" text="The Pragmatic Engineer" xmlUrl="https://newsletter.pragmaticengineer.com/feed" htmlUrl="https://newsletter.pragmaticengineer.com" type="rss"></outline>
+            <outline title="The Pragmatic Engineer (blog)" text="The Pragmatic Engineer (blog)" xmlUrl="https://blog.pragmaticengineer.com/rss/" htmlUrl="https://blog.pragmaticengineer.com" type="rss"></outline>
+            <outline title="FDE Hub" text="FDE Hub" xmlUrl="https://fdehub.substack.com/feed" htmlUrl="https://fdehub.substack.com" type="rss"></outline>
+            <outline title="GTM Engineering" text="GTM Engineering" xmlUrl="https://newsletter.gtmengineering.ai/feed" htmlUrl="https://newsletter.gtmengineering.ai" type="rss"></outline>
+            <outline title="Bloomberry" text="Bloomberry" xmlUrl="https://bloomberry.com/" htmlUrl="https://bloomberry.com" type="rss"></outline>
+            <outline title="Silicon Valley Product Group" text="Silicon Valley Product Group" xmlUrl="https://www.svpg.com/feed/" htmlUrl="https://www.svpg.com" type="rss"></outline>
+            </outline>
+        <outline text="Applied-AI-Agents">
+            <outline title="Latent.Space" text="Latent.Space" xmlUrl="https://www.latent.space/feed" htmlUrl="https://www.latent.space" type="rss"></outline>
+            <outline title="Simon Willison&#39;s Weblog" text="Simon Willison&#39;s Weblog" xmlUrl="https://simonwillison.net/atom/everything/" htmlUrl="https://simonwillison.net/" type="rss"></outline>
+            <outline title="r/LocalLLaMA (top / week)" text="r/LocalLLaMA (top / week)" xmlUrl="https://www.reddit.com/r/LocalLLaMA/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/LocalLLaMA/" description="Locally hostable AI." miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="TLDR AI" text="TLDR AI" xmlUrl="https://bullrich.dev/tldr-rss/ai.rss" htmlUrl="https://bullrich.dev/tldr-rss/" type="rss"></outline>
+            <outline title="Eugene Yan" text="Eugene Yan" xmlUrl="https://eugeneyan.com/rss/" htmlUrl="https://eugeneyan.com" type="rss"></outline>
+            <outline title="Hamel Husain" text="Hamel Husain" xmlUrl="https://hamel.dev/index.xml" htmlUrl="https://hamel.dev" type="rss"></outline>
+            <outline title="Chip Huyen" text="Chip Huyen" xmlUrl="https://huyenchip.com/feed.xml" htmlUrl="https://huyenchip.com" type="rss"></outline>
+            <outline title="Lilian Weng" text="Lilian Weng" xmlUrl="https://lilianweng.github.io/index.xml" htmlUrl="https://lilianweng.github.io" type="rss"></outline>
+            <outline title="Jason Liu" text="Jason Liu" xmlUrl="https://jxnl.co/feed_rss_created.xml" htmlUrl="https://jxnl.co" type="rss"></outline>
+            <outline title="LangChain Blog" text="LangChain Blog" xmlUrl="https://blog.langchain.dev/" htmlUrl="https://blog.langchain.dev" type="rss"></outline>
+            <outline title="OpenAI News" text="OpenAI News" xmlUrl="https://openai.com/news/rss.xml" htmlUrl="https://openai.com/news/" type="rss"></outline>
+            <outline title="Hugging Face Blog" text="Hugging Face Blog" xmlUrl="https://huggingface.co/blog/feed.xml" htmlUrl="https://huggingface.co/blog" type="rss"></outline>
+            <outline title="Google DeepMind Blog" text="Google DeepMind Blog" xmlUrl="https://deepmind.google/blog/feed/basic/" htmlUrl="https://deepmind.google/blog/" type="rss"></outline>
+        </outline>
+        <outline text="AI-Infra-Inference">
+            <outline title="vLLM Blog" text="vLLM Blog" xmlUrl="https://vllm.ai/blog/rss.xml" htmlUrl="https://vllm.ai/blog" type="rss"></outline>
+            <outline title="Aleksa Gordi&#263;" text="Aleksa Gordi&#263;" xmlUrl="https://www.aleksagordic.com/blog" htmlUrl="https://www.aleksagordic.com" type="rss"></outline>
+            <outline title="Modal Blog" text="Modal Blog" xmlUrl="https://modal.com/blog" htmlUrl="https://modal.com/blog" type="rss"></outline>
+            <outline title="Baseten Blog" text="Baseten Blog" xmlUrl="https://www.baseten.co/blog" htmlUrl="https://www.baseten.co/blog" type="rss"></outline>
+            <outline title="Kubernetes Blog" text="Kubernetes Blog" xmlUrl="https://kubernetes.io/feed.xml" htmlUrl="https://kubernetes.io" type="rss"></outline>
+            <outline title="CNCF" text="CNCF" xmlUrl="https://www.cncf.io/feed/" htmlUrl="https://www.cncf.io" type="rss"></outline>
+            <outline title="Last Week in Kubernetes Development" text="Last Week in Kubernetes Development" xmlUrl="https://lwkd.info/feed.xml" htmlUrl="https://lwkd.info" type="rss"></outline>
+            <outline title="llama.cpp Releases" text="llama.cpp Releases" xmlUrl="https://github.com/ggml-org/llama.cpp/releases.atom" htmlUrl="https://github.com/ggml-org/llama.cpp/releases" type="rss"></outline>
+            <outline title="vLLM Releases" text="vLLM Releases" xmlUrl="https://github.com/vllm-project/vllm/releases.atom" htmlUrl="https://github.com/vllm-project/vllm/releases" type="rss"></outline>
+            <outline title="Ollama Releases" text="Ollama Releases" xmlUrl="https://github.com/ollama/ollama/releases.atom" htmlUrl="https://github.com/ollama/ollama/releases" type="rss"></outline>
+            <outline title="SemiAnalysis" text="SemiAnalysis" xmlUrl="https://www.semianalysis.com/feed" htmlUrl="https://www.semianalysis.com" type="rss"></outline>
+        </outline>
+        <outline text="Object-Storage-Data">
+            <outline title="AWS Storage Blog" text="AWS Storage Blog" xmlUrl="https://aws.amazon.com/blogs/storage/feed/" htmlUrl="https://aws.amazon.com/blogs/storage/" type="rss"></outline>
+            <outline title="AWS Recent Announcements" text="AWS Recent Announcements" xmlUrl="https://aws.amazon.com/about-aws/whats-new/recent/feed/" htmlUrl="https://aws.amazon.com/about-aws/whats-new/recent/" description="Keeplist rule suggested: (?i)(s3|storage|glacier|backup|snowball|datasync|efs|fsx)" type="rss"></outline>
+            <outline title="Cloudflare Blog" text="Cloudflare Blog" xmlUrl="https://blog.cloudflare.com/rss/" htmlUrl="https://blog.cloudflare.com" type="rss"></outline>
+            <outline title="Backblaze Blog" text="Backblaze Blog" xmlUrl="https://www.backblaze.com/blog/feed/" htmlUrl="https://www.backblaze.com/blog/" type="rss"></outline>
+            <outline title="MinIO Blog" text="MinIO Blog" xmlUrl="https://min.io/blog" htmlUrl="https://min.io/blog" type="rss"></outline>
+            <outline title="Ceph Blog" text="Ceph Blog" xmlUrl="https://ceph.io/en/news/blog/" htmlUrl="https://ceph.io/en/news/blog/" type="rss"></outline>
+            <outline title="SeaweedFS Releases" text="SeaweedFS Releases" xmlUrl="https://github.com/seaweedfs/seaweedfs/releases.atom" htmlUrl="https://github.com/seaweedfs/seaweedfs/releases" type="rss"></outline>
+            <outline title="WarpStream Blog" text="WarpStream Blog" xmlUrl="https://www.warpstream.com/blog/rss.xml" htmlUrl="https://www.warpstream.com/blog" type="rss"></outline>
+            <outline title="r/aws (top / week)" text="r/aws (top / week)" xmlUrl="https://www.reddit.com/r/aws/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/aws/" description="Keeplist rule suggested: (?i)(s3|storage|glacier|backup|athena|lake|egress)" miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="TLDR DATA" text="TLDR DATA" xmlUrl="https://bullrich.dev/tldr-rss/data.rss" htmlUrl="https://bullrich.dev/tldr-rss/" type="rss"></outline>
+        </outline>
+        <outline text="Cloud-DevOps">
+            <outline title="AWS News Blog" text="AWS News Blog" xmlUrl="https://aws.amazon.com/blogs/aws/feed/" htmlUrl="https://aws.amazon.com/blogs/aws/" type="rss"></outline>
+            <outline title="Microsoft Azure Blog" text="Microsoft Azure Blog" xmlUrl="https://azure.microsoft.com/en-us/blog/feed/" htmlUrl="https://azure.microsoft.com/en-us/blog/" type="rss"></outline>
+            <outline title="The New Stack" text="The New Stack" xmlUrl="https://thenewstack.io/feed/" htmlUrl="https://thenewstack.io/" type="rss"></outline>
+            <outline title="StackFeed" text="StackFeed" xmlUrl="https://stackfeed.io/feed/" htmlUrl="https://stackfeed.io" type="rss"></outline>
+            <outline title="TLDR DevOps" text="TLDR DevOps" xmlUrl="https://bullrich.dev/tldr-rss/devops.rss" htmlUrl="https://bullrich.dev/tldr-rss/" type="rss"></outline>
+            <outline title="r/kubernetes (top / week)" text="r/kubernetes (top / week)" xmlUrl="https://www.reddit.com/r/kubernetes/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/kubernetes/" miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+        </outline>
+        <outline text="Homelab-K8s">
+            <outline title="r/selfhosted (top / week)" text="r/selfhosted (top / week)" xmlUrl="https://www.reddit.com/r/selfhosted/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/selfhosted/" miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="r/homelab (top / week)" text="r/homelab (top / week)" xmlUrl="https://www.reddit.com/r/homelab/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/homelab/" miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="r/Proxmox (top / week)" text="r/Proxmox (top / week)" xmlUrl="https://www.reddit.com/r/Proxmox/top.rss?t=week&amp;limit=40" htmlUrl="https://www.reddit.com/r/Proxmox/" miniflux:userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="ServeTheHome Forums" text="ServeTheHome Forums" xmlUrl="https://feeds.feedburner.com/ServethehomecomForums" htmlUrl="https://forums.servethehome.com/index.php" type="rss"></outline>
+            <outline title="Tailscale Blog" text="Tailscale Blog" xmlUrl="https://tailscale.com/blog/index.xml" htmlUrl="https://tailscale.com/blog" type="rss"></outline>
+            <outline title="Fly.io Blog" text="Fly.io Blog" xmlUrl="https://fly.io/blog/feed.xml" htmlUrl="https://fly.io/blog" type="rss"></outline>
+            <outline title="selfh.st" text="selfh.st" xmlUrl="https://selfh.st/rss/" htmlUrl="https://selfh.st" type="rss"></outline>
+            <outline title="Jeff Geerling" text="Jeff Geerling" xmlUrl="https://www.jeffgeerling.com/blog.xml" htmlUrl="https://www.jeffgeerling.com" type="rss"></outline>
+        </outline>
+        <outline text="Security-SRE">
+            <outline title="HN: postmortems" text="HN: postmortems" xmlUrl="https://hnrss.org/newest?q=postmortem&amp;points=40" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: CVE" text="HN: CVE" xmlUrl="https://hnrss.org/newest?q=CVE&amp;points=80" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: kubernetes security" text="HN: kubernetes security" xmlUrl="https://hnrss.org/newest?q=kubernetes+security&amp;points=25" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="rachelbythebay" text="rachelbythebay" xmlUrl="https://rachelbythebay.com/w/atom.xml" htmlUrl="https://rachelbythebay.com/w/" type="rss"></outline>
+            <outline title="Dan Luu" text="Dan Luu" xmlUrl="https://danluu.com/atom.xml" htmlUrl="https://danluu.com" type="rss"></outline>
+            <outline title="Brendan Gregg" text="Brendan Gregg" xmlUrl="https://www.brendangregg.com/blog/rss.xml" htmlUrl="https://www.brendangregg.com/blog/" type="rss"></outline>
+        </outline>
+        <outline text="HN-Trending">
+            <outline title="Hacker News: Front Page (150+)" text="Hacker News: Front Page (150+)" xmlUrl="https://hnrss.org/frontpage?points=150" htmlUrl="https://news.ycombinator.com/" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: &#34;forward deployed&#34;" text="HN: &#34;forward deployed&#34;" xmlUrl="https://hnrss.org/newest?q=%22forward+deployed%22" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: &#34;solutions engineer&#34;" text="HN: &#34;solutions engineer&#34;" xmlUrl="https://hnrss.org/newest?q=%22solutions+engineer%22" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: vLLM" text="HN: vLLM" xmlUrl="https://hnrss.org/newest?q=vLLM&amp;points=30" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: inference" text="HN: inference" xmlUrl="https://hnrss.org/newest?q=inference&amp;points=100" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: &#34;object storage&#34;" text="HN: &#34;object storage&#34;" xmlUrl="https://hnrss.org/newest?q=%22object+storage%22&amp;points=30" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: S3" text="HN: S3" xmlUrl="https://hnrss.org/newest?q=S3&amp;points=120" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: Kubernetes" text="HN: Kubernetes" xmlUrl="https://hnrss.org/newest?q=Kubernetes&amp;points=150" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: RAG" text="HN: RAG" xmlUrl="https://hnrss.org/newest?q=RAG&amp;points=75" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: Anthropic" text="HN: Anthropic" xmlUrl="https://hnrss.org/newest?q=Anthropic&amp;points=100" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+            <outline title="HN: agents" text="HN: agents" xmlUrl="https://hnrss.org/newest?q=agents&amp;points=150" htmlUrl="https://news.ycombinator.com/newest" miniflux:disableHTTP2="true" type="rss"></outline>
+        </outline>
+        <outline text="Digests">
+            <outline title="TLDR Tech" text="TLDR Tech" xmlUrl="https://bullrich.dev/tldr-rss/tech.rss" htmlUrl="https://bullrich.dev/tldr-rss/" miniflux:crawler="true" type="rss"></outline>
+            <outline title="TLDR Design" text="TLDR Design" xmlUrl="https://bullrich.dev/tldr-rss/design.rss" htmlUrl="https://bullrich.dev/tldr-rss/" type="rss"></outline>
+        </outline>
+        <outline text="Deals">
+            <outline title="Slickdeals Popular Deals" text="Slickdeals Popular Deals" xmlUrl="https://slickdeals.net/newsearch.php?mode=popdeals&amp;searcharea=deals&amp;searchin=first&amp;rss=1" htmlUrl="https://slickdeals.net/deals/" type="rss"></outline>
+            <outline title="Slickdeals Frontpage" text="Slickdeals Frontpage" xmlUrl="https://slickdeals.net/newsearch.php?mode=frontpage&amp;searcharea=deals&amp;searchin=first&amp;rss=1" htmlUrl="https://slickdeals.net/" type="rss"></outline>
+            <outline title="ServeTheHome Great Deals" text="ServeTheHome Great Deals" xmlUrl="https://feeds.feedburner.com/servethehome/dWoS" htmlUrl="https://forums.servethehome.com/index.php" type="rss"></outline>
+        </outline>
+    </body>
+</opml>

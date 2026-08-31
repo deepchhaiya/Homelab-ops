@@ -1,0 +1,4 @@
+# Personal / non-public — the real interest profile lives in the SOPS secret
+# (n8n-secrets key CURATOR_PROFILE), never committed here. Repo is public.
+interest-profile.local.md
+*.local.md

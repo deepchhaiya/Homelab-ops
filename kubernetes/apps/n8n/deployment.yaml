@@ -112,6 +112,34 @@ spec:
                 secretKeyRef:
                   name: n8n-secrets
                   key: UPSNAP_PASSWORD
+            - name: MINIFLUX_URL
+              value: "http://miniflux.miniflux.svc.cluster.local:8080"
+            - name: MINIFLUX_TOKEN
+              valueFrom:
+                secretKeyRef: { name: n8n-secrets, key: MINIFLUX_TOKEN }
+            - name: OLLAMA_URL
+              value: "http://192.168.4.12:11434"
+            - name: OLLAMA_MODEL
+              value: "qwen3:4b-instruct"
+            - name: GOTIFY_URL
+              value: "http://192.168.4.13:8800"
+            - name: GOTIFY_CURATOR_TOKEN
+              valueFrom:
+                secretKeyRef: { name: n8n-secrets, key: GOTIFY_CURATOR_TOKEN }
+            # optional:true so the pod still starts before the key is added;
+            # the workflow falls back to its baked-in generic prompt until then
+            - name: CURATOR_PROFILE
+              valueFrom:
+                secretKeyRef: { name: n8n-secrets, key: CURATOR_PROFILE, optional: true }
+            # optional — digest persona; omit and the digest uses its generic fallback
+            - name: CURATOR_DIGEST_PROFILE
+              valueFrom:
+                secretKeyRef: { name: n8n-secrets, key: CURATOR_DIGEST_PROFILE, optional: true }
+            # optional: bigger model for the Sunday digest (falls back to OLLAMA_URL/qwen3:14b)
+            - name: OLLAMA_DIGEST_URL
+              value: "http://192.168.4.84:11434"
+            - name: OLLAMA_DIGEST_MODEL
+              value: "qwen3.6:35b-a3b"
           volumeMounts:
             - name: config
               mountPath: /home/node/.n8n
