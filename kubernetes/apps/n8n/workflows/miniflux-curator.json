@@ -3,8 +3,7 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Chicago",
-    "saveDataSuccessExecution": "all",
-    "saveExecutionProgress": true
+    "saveDataSuccessExecution": "all"
   },
   "meta": {},
   "pinData": {},
@@ -20,19 +19,22 @@
           ]
         }
       },
-      "id": "11111111-1111-1111-1111-111111111111",
+      "id": "c0000000-0000-0000-0000-000000000001",
       "name": "Every 3h (07-21)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -1200,
+        -1240,
         0
       ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.MINIFLUX_URL }}/v1/entries?status=unread&direction=asc&limit=60",
+        "url": "http://miniflux.miniflux.svc.cluster.local:8080/v1/entries?status=unread&direction=asc&limit=60",
+        "options": {
+          "timeout": 20000
+        },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -41,25 +43,22 @@
               "value": "={{ $env.MINIFLUX_TOKEN }}"
             }
           ]
-        },
-        "options": {
-          "timeout": 20000
         }
       },
-      "id": "22222222-2222-2222-2222-222222222222",
+      "id": "c0000000-0000-0000-0000-000000000002",
       "name": "Miniflux: get unread",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1000,
+        -1020,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// runOnceForAllItems: turn the Miniflux entries array into one item per entry,\n// each carrying the system prompt + the user message for Ollama.\n// The real reader profile is injected via the CURATOR_PROFILE env var (from the\n// SOPS secret) so nothing personal lives in this workflow JSON. Falls back to a\n// generic prompt if the env var is unset.\nconst res = $input.first().json;\nconst entries = Array.isArray(res.entries) ? res.entries : [];\n\nconst GENERIC = \"You are a feed-triage assistant. Score each article 0-10 on how much it advances the reader's goals, then put it in one bucket.\\n\\nREADER (generic fallback - the real profile is injected from CURATOR_PROFILE)\\nInterested in: applied AI / LLM engineering, cloud and object storage, Kubernetes and inference infrastructure, and self-hosting. Favour hands-on engineering depth and things worth writing about; discount news, funding and product announcements.\\n\\nSCORE 0-10 ON GOAL LEVERAGE, NOT GENERAL INTEREST\\n9-10  Deep how-it-works pieces the reader could reproduce, primary-source case studies, strong signal for the target field.\\n7-8   Strongly relevant engineering patterns, techniques on the learning path, or a clear angle the reader could write about.\\n5-6   Tangentially useful: general platform/SRE/cost content, a technique that could become a writeup, broad industry news with a concrete takeaway.\\n2-4   Low: generic tech news, announcements with no engineering substance.\\n0-1   Noise: unrelated, clickbait, marketing, duplicate-feeling.\\n\\nBUCKETS (pick one): career | applied-ai | infra | storage | homelab | noise\\n\\nOUTPUT\\nReturn ONLY a JSON object, no prose, no code fence:\\n{\\\"score\\\": <int 0-10>, \\\"bucket\\\": \\\"<one bucket>\\\", \\\"why\\\": \\\"<=25 words>\\\", \\\"publish_angle\\\": \\\"<a post title the reader could write, or empty string>\\\"}\";\nconst envP = ($env.CURATOR_PROFILE || '').trim();\nconst PROFILE = envP.length > 40 ? envP : GENERIC;\n\nreturn entries.map((e) => {\n  const html = e.content || e.summary || '';\n  const text = String(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\s+/g, ' ').trim().slice(0, 1400);\n  const feed = (e.feed && e.feed.title) || '';\n  const category = (e.feed && e.feed.category && e.feed.category.title) || '';\n  const userMsg = `TITLE: ${e.title}\\nFEED: ${feed}\\nMINIFLUX_CATEGORY: ${category}\\nAUTHOR: ${e.author || ''}\\nURL: ${e.url}\\nPUBLISHED: ${e.published_at || ''}\\n\\nEXCERPT:\\n${text || '(no excerpt)'}`;\n  return { json: { id: e.id, title: e.title, url: e.url, feed, category, sysPrompt: PROFILE, userMsg } };\n});\n"
+        "jsCode": "// runOnceForAllItems. No $env here (Code nodes run in the task runner and don't\n// see the deployment env). Paste your real profile into PROFILE below.\nconst res = $input.first().json;\nconst entries = Array.isArray(res.entries) ? res.entries : [];\n\nconst PROFILE = \"You are a feed-triage assistant. Score each article 0-10 on how much it advances the reader's goals, then put it in one bucket.\\n\\nREADER  (replace this block with your real profile in this node; keep it out of the public repo)\\nInterested in applied AI / LLM engineering, cloud and object storage, Kubernetes and inference infrastructure, and self-hosting. Favour hands-on engineering depth and things worth writing about; discount news, funding and product announcements.\\n\\nSCORE 0-10 ON GOAL LEVERAGE, NOT GENERAL INTEREST\\n9-10  reproduce-and-write-up depth, primary-source case studies, strong signal for the target field.\\n7-8   strongly relevant engineering patterns, techniques on the learning path, or a clear angle worth writing about.\\n5-6   tangentially useful: general platform/SRE/cost content, a technique that could become a writeup.\\n2-4   generic tech news, announcements with no engineering substance.\\n0-1   noise: unrelated, clickbait, marketing.\\n\\nBUCKETS (pick one): career | applied-ai | infra | storage | homelab | noise\\n\\nOUTPUT  Return ONLY a JSON object, no prose, no code fence:\\n{\\\"score\\\": <int 0-10>, \\\"bucket\\\": \\\"<one bucket>\\\", \\\"why\\\": \\\"<=25 words>\\\", \\\"publish_angle\\\": \\\"<a post title the reader could write, or empty string>\\\"}\";\n\nreturn entries.map((e) => {\n  const html = e.content || e.summary || '';\n  const text = String(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\s+/g, ' ').trim().slice(0, 1400);\n  const feed = (e.feed && e.feed.title) || '';\n  const category = (e.feed && e.feed.category && e.feed.category.title) || '';\n  const userMsg = 'TITLE: ' + e.title + '\\nFEED: ' + feed + '\\nCATEGORY: ' + category + '\\nURL: ' + e.url + '\\n\\nEXCERPT:\\n' + (text || '(no excerpt)');\n  return { json: { id: e.id, title: e.title, url: e.url, feed, category, sysPrompt: PROFILE, userMsg } };\n});\n"
       },
-      "id": "33333333-3333-3333-3333-333333333333",
+      "id": "c0000000-0000-0000-0000-000000000003",
       "name": "Prep entries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -71,10 +70,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.OLLAMA_URL }}/api/chat",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { model: ($env.OLLAMA_MODEL || 'qwen3:4b-instruct'), stream: false, format: 'json', keep_alive: '30m', options: { temperature: 0.1, num_ctx: 8192 }, messages: [ { role: 'system', content: $json.sysPrompt }, { role: 'user', content: $json.userMsg } ] } }}",
+        "url": "http://192.168.4.12:11434/api/chat",
         "options": {
           "timeout": 120000,
           "batching": {
@@ -83,9 +79,12 @@
               "batchInterval": 1500
             }
           }
-        }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen3:4b-instruct\", stream: false, format: \"json\", keep_alive: 1800, options: { temperature: 0.1, num_ctx: 8192 }, messages: [ { role: \"system\", content: String($json.sysPrompt || \"\") }, { role: \"user\", content: String($json.userMsg || \"\") } ] }) }}"
       },
-      "id": "44444444-4444-4444-4444-444444444444",
+      "id": "c0000000-0000-0000-0000-000000000004",
       "name": "Ollama: score",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -96,30 +95,15 @@
     },
     {
       "parameters": {
-        "mode": "combine",
-        "combineBy": "combineByPosition",
-        "options": {}
+        "jsCode": "// runOnceForEachItem. Pull the model verdict from this item, originals from Prep by index.\nconst orig = $('Prep entries').all()[$itemIndex].json;\nlet v = {};\ntry { v = JSON.parse(($json.message && $json.message.content) || '{}'); } catch (e) { v = {}; }\n\nlet score = Math.round(Number(v.score));\nif (!Number.isFinite(score)) score = 0;\nscore = Math.max(0, Math.min(10, score));\nconst bucket = String(v.bucket || 'noise');\nconst why = String(v.why || '').slice(0, 240);\nconst angle = String(v.publish_angle || '').slice(0, 240);\n\nlet action = score >= 8 ? 'notify' : (score >= 6 ? 'star' : 'skip');\n\nconst now = $now.setZone('America/Chicago');\nconst hm = now.hour + now.minute / 60;\nconst quiet = (hm >= 22 || hm < 7.5);\nconst sd = $getWorkflowStaticData('global');\nconst today = now.toFormat('yyyy-LL-dd');\nif (sd.capDate !== today) { sd.capDate = today; sd.capCount = 0; }\nif (action === 'notify') {\n  if (quiet || (sd.capCount || 0) >= 6) action = 'star';\n  else sd.capCount = (sd.capCount || 0) + 1;\n}\n\nconst emoji = ({ career: '🎯', storage: '🗄️', infra: '⚙️', 'applied-ai': '🤖', homelab: '🏠', noise: '·' })[bucket] || '•';\nconst gotifyPriority = score >= 9 ? 8 : 6;\nconst gotifyTitle = (emoji + ' [' + score + '] ' + (orig.feed || '')).slice(0, 120);\nlet gotifyMessage = '**' + orig.title + '**\\n\\n' + why;\nif (angle) gotifyMessage += '\\n\\n✍️ Post angle: ' + angle;\ngotifyMessage += '\\n\\n' + orig.url;\nconst karakeepNote = 'score ' + score + ' · ' + bucket + (why ? ' · ' + why : '') + (angle ? ' · angle: ' + angle : '');\n\nreturn { json: { id: orig.id, url: orig.url, title: orig.title, feed: orig.feed, category: orig.category, score, bucket, why, publish_angle: angle, action, gotifyPriority, gotifyTitle, gotifyMessage, karakeepNote } };\n",
+        "mode": "runOnceForEachItem"
       },
-      "id": "55555555-5555-5555-5555-555555555555",
-      "name": "Merge orig + score",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        -360,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// runOnceForEachItem: parse the model verdict, apply thresholds,\n// quiet hours (22:00-07:30 America/Chicago) and a daily push cap.\nconst j = $json;\nlet v = {};\ntry { v = JSON.parse((j.message && j.message.content) || '{}'); }\ncatch (e) { v = { score: 0, bucket: 'noise', why: 'model returned non-JSON', publish_angle: '' }; }\n\nlet score = Math.round(Number(v.score));\nif (!Number.isFinite(score)) score = 0;\nscore = Math.max(0, Math.min(10, score));\nconst bucket = String(v.bucket || 'noise');\nconst why = String(v.why || '').slice(0, 240);\nconst angle = String(v.publish_angle || '').slice(0, 240);\n\nlet action = 'skip';\nif (score >= 8) action = 'notify';\nelse if (score >= 6) action = 'star';\n\nconst now = DateTime.now().setZone('America/Chicago');\nconst hm = now.hour + now.minute / 60;\nconst quiet = (hm >= 22 || hm < 7.5);\n\nconst sd = $getWorkflowStaticData('global');\nconst today = now.toFormat('yyyy-LL-dd');\nif (sd.capDate !== today) { sd.capDate = today; sd.capCount = 0; }\nconst DAILY_CAP = 6;\n\nif (action === 'notify') {\n  if (quiet || (sd.capCount || 0) >= DAILY_CAP) action = 'star';\n  else sd.capCount = (sd.capCount || 0) + 1;\n}\n\nconst emoji = ({ 'career': '\\uD83C\\uDFAF', 'storage': '\\uD83D\\uDDC4\\uFE0F', 'infra': '\\u2699\\uFE0F', 'applied-ai': '\\uD83E\\uDD16', 'homelab': '\\uD83C\\uDFE0', 'noise': '\\u00B7' })[bucket] || '\\u2022';\nconst gotifyPriority = score >= 9 ? 8 : 6;\nconst gotifyTitle = `${emoji} [${score}] ${j.feed || ''}`.slice(0, 120);\nlet gotifyMessage = `**${j.title}**\\n\\n${why}`;\nif (angle) gotifyMessage += `\\n\\n\\u270D\\uFE0F Post angle: ${angle}`;\ngotifyMessage += `\\n\\n${j.url}`;\n\nreturn { json: { id: j.id, url: j.url, title: j.title, feed: j.feed, category: j.category, score, bucket, why, publish_angle: angle, action, gotifyPriority, gotifyTitle, gotifyMessage } };\n"
-      },
-      "id": "66666666-6666-6666-6666-666666666666",
+      "id": "c0000000-0000-0000-0000-000000000005",
       "name": "Decide",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -140,
+        -360,
         0
       ]
     },
@@ -199,19 +183,20 @@
           "fallbackOutput": "none"
         }
       },
-      "id": "77777777-7777-7777-7777-777777777777",
+      "id": "c0000000-0000-0000-0000-000000000006",
       "name": "notify / star / skip",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        80,
+        -140,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GOTIFY_URL }}/message",
+        "url": "http://192.168.4.13:8800/message",
+        "options": {},
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -223,46 +208,51 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { title: $json.gotifyTitle, message: $json.gotifyMessage, priority: $json.gotifyPriority, extras: { 'client::display': { contentType: 'text/markdown' }, 'client::notification': { click: { url: $json.url } } } } }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify({ title: $json.gotifyTitle, message: $json.gotifyMessage, priority: $json.gotifyPriority, extras: { \"client::display\": { contentType: \"text/markdown\" }, \"client::notification\": { click: { url: $json.url } } } }) }}"
       },
-      "id": "88888888-8888-8888-8888-888888888888",
+      "id": "c0000000-0000-0000-0000-000000000007",
       "name": "Gotify push",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        300,
-        -140
-      ]
+        80,
+        -160
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "={{ $env.MINIFLUX_URL }}/v1/entries/{{ $json.id }}/bookmark",
+        "method": "POST",
+        "url": "={{ $env.KARAKEEP_URL }}/api/v1/bookmarks",
+        "options": {},
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "X-Auth-Token",
-              "value": "={{ $env.MINIFLUX_TOKEN }}"
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.KARAKEEP_TOKEN }}"
             }
           ]
         },
-        "options": {}
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: \"link\", url: $json.url, title: $json.title, note: $json.karakeepNote, favourited: ($json.action === \"notify\") }) }}"
       },
-      "id": "99999999-9999-9999-9999-999999999999",
-      "name": "Miniflux: star",
+      "id": "c0000000-0000-0000-0000-000000000008",
+      "name": "Karakeep: save",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        520,
-        -60
-      ]
+        300,
+        -40
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "method": "PUT",
-        "url": "={{ $env.MINIFLUX_URL }}/v1/entries",
+        "url": "http://miniflux.miniflux.svc.cluster.local:8080/v1/entries",
+        "options": {},
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -274,17 +264,17 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { entry_ids: [ $json.id ], status: 'read' } }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify({ entry_ids: [ $json.id ], status: \"read\" }) }}"
       },
-      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "id": "c0000000-0000-0000-0000-000000000009",
       "name": "Miniflux: mark read",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        740,
+        520,
         0
-      ]
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -317,27 +307,11 @@
             "node": "Ollama: score",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Merge orig + score",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
     },
     "Ollama: score": {
-      "main": [
-        [
-          {
-            "node": "Merge orig + score",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge orig + score": {
       "main": [
         [
           {
@@ -370,7 +344,7 @@
         ],
         [
           {
-            "node": "Miniflux: star",
+            "node": "Karakeep: save",
             "type": "main",
             "index": 0
           }
@@ -388,14 +362,14 @@
       "main": [
         [
           {
-            "node": "Miniflux: star",
+            "node": "Karakeep: save",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Miniflux: star": {
+    "Karakeep: save": {
       "main": [
         [
           {

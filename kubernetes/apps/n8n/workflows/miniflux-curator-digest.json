@@ -19,78 +19,79 @@
           ]
         }
       },
-      "id": "b1111111-1111-1111-1111-111111111111",
+      "id": "d0000000-0000-0000-0000-000000000001",
       "name": "Sundays 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -800,
+        -820,
         0
       ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.MINIFLUX_URL }}/v1/entries?starred=true&direction=desc&limit=100&published_after={{ Math.floor(Date.now()/1000) - 604800 }}",
+        "url": "={{ $env.KARAKEEP_URL }}/api/v1/bookmarks?limit=50",
+        "options": {
+          "timeout": 20000
+        },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "X-Auth-Token",
-              "value": "={{ $env.MINIFLUX_TOKEN }}"
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.KARAKEEP_TOKEN }}"
             }
           ]
-        },
-        "options": {
-          "timeout": 20000
         }
       },
-      "id": "b2222222-2222-2222-2222-222222222222",
-      "name": "Miniflux: starred last 7d",
+      "id": "d0000000-0000-0000-0000-000000000002",
+      "name": "Karakeep: recent bookmarks",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -580,
+        -600,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "const res = $input.first().json;\nconst ents = Array.isArray(res.entries) ? res.entries : [];\nconst list = ents.map((e, i) => {\n  const cat = (e.feed && e.feed.category && e.feed.category.title) || '-';\n  const feed = (e.feed && e.feed.title) || '';\n  return `${i + 1}. [${cat}] ${e.title} \\u2014 ${feed}\\n   ${e.url}`;\n}).join('\\n');\n\nconst GENERIC_SYS = `You are the reader's research chief of staff. Their detailed profile is injected at runtime. Given the list of articles the reader starred this week, produce concise markdown with exactly these sections:\\n## Top 5 reads  (ranked, one line each: what it is + why it matters to their goals; pick from the list only)\\n## 3 post angles  (each: a specific title, 2 bullet outline, which of their skills/assets it leverages; bias to weekend-sized)\\n## Market signal  (one hiring / comp / tech-shift observation worth acting on)\\n## Weekend lab project  (one <1 weekend project that would give interview-defensible depth)`;\nconst envS = ($env.CURATOR_DIGEST_PROFILE || '').trim();\nconst sys = envS.length > 40 ? envS : GENERIC_SYS;\n\nconst user = ents.length\n  ? `Articles the reader starred this week (${ents.length}):\\n\\n${list}`\n  : `Nothing was starred this week. Use the reader's standing themes from the profile above to still produce all four sections.`;\n\nreturn [{ json: { sysPrompt: sys, userMsg: user, count: ents.length } }];\n"
+        "jsCode": "// Pull recent Karakeep bookmarks, keep the last 7 days, build the prompt.\nconst res = $input.first().json;\nconst raw = Array.isArray(res.bookmarks) ? res.bookmarks : (Array.isArray(res) ? res : []);\nconst weekAgo = Date.now() - 7 * 24 * 3600 * 1000;\nconst items = raw.filter((b) => {\n  const t = Date.parse(b.createdAt || b.created_at || '');\n  return isNaN(t) ? true : t >= weekAgo;\n});\nconst list = items.map((b, i) => {\n  const c = b.content || {};\n  const url = c.url || b.url || '';\n  const title = b.title || c.title || url || 'untitled';\n  const tags = (b.tags || []).map((t) => t.name || t).filter(Boolean).join(', ');\n  return (i + 1) + '. ' + title + (tags ? '  [' + tags + ']' : '') + '\\n   ' + url;\n}).join('\\n');\n\nconst sys = \"You are the reader's research chief of staff. Their detailed profile is set in this node - replace this block for your own use.\\nGiven the list of items the reader bookmarked this week, produce concise markdown with exactly these sections:\\n## Top 5 reads   (ranked, one line each: what it is + why it matters to the reader's goals; pick from the list only)\\n## 3 post angles (each: a specific title, a 2-bullet outline, which skill/asset it leverages; bias to weekend-sized)\\n## Market signal (one hiring / comp / tech-shift observation worth acting on)\\n## Weekend lab project (one <1 weekend project that would give interview-defensible depth)\\nIf the list is empty, use the reader's standing themes and still produce all four sections.\";\nconst user = items.length\n  ? ('Bookmarks saved this week (' + items.length + '):\\n\\n' + list)\n  : 'Nothing was bookmarked this week. Use the standing themes to still produce all four sections.';\nreturn [{ json: { sysPrompt: sys, userMsg: user, count: items.length } }];\n"
       },
-      "id": "b3333333-3333-3333-3333-333333333333",
+      "id": "d0000000-0000-0000-0000-000000000003",
       "name": "Build digest prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -360,
+        -380,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.OLLAMA_DIGEST_URL || $env.OLLAMA_URL }}/api/chat",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { model: ($env.OLLAMA_DIGEST_MODEL || 'qwen3:14b'), stream: false, keep_alive: '10m', options: { temperature: 0.4, num_ctx: 16384 }, messages: [ { role: 'system', content: $json.sysPrompt }, { role: 'user', content: $json.userMsg } ] } }}",
+        "url": "http://192.168.4.12:11434/api/chat",
         "options": {
           "timeout": 300000
-        }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen3:4b-instruct\", stream: false, keep_alive: 1800, options: { temperature: 0.4, num_ctx: 16384 }, messages: [ { role: \"system\", content: String($json.sysPrompt || \"\") }, { role: \"user\", content: String($json.userMsg || \"\") } ] }) }}"
       },
-      "id": "b4444444-4444-4444-4444-444444444444",
+      "id": "d0000000-0000-0000-0000-000000000004",
       "name": "Ollama: synthesize",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -140,
+        -160,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GOTIFY_URL }}/message",
+        "url": "http://192.168.4.13:8800/message",
+        "options": {},
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -102,15 +103,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { title: '\\uD83D\\uDCF0 Weekly feed digest', message: (($json.message && $json.message.content) || 'no content'), priority: 5, extras: { 'client::display': { contentType: 'text/markdown' } } } }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify({ title: \"📰 Weekly feed digest\", message: (($json.message && $json.message.content) || \"no content\"), priority: 5, extras: { \"client::display\": { contentType: \"text/markdown\" } } }) }}"
       },
-      "id": "b5555555-5555-5555-5555-555555555555",
+      "id": "d0000000-0000-0000-0000-000000000005",
       "name": "Gotify: digest",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        80,
+        60,
         0
       ]
     }
@@ -120,14 +120,14 @@
       "main": [
         [
           {
-            "node": "Miniflux: starred last 7d",
+            "node": "Karakeep: recent bookmarks",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Miniflux: starred last 7d": {
+    "Karakeep: recent bookmarks": {
       "main": [
         [
           {
