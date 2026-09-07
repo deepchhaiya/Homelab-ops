@@ -73,6 +73,10 @@ spec:
             - { name: HF_HOME, value: "/home/hindsight/.pg0/hf" }
             - { name: HINDSIGHT_API_LOG_LEVEL, value: "info" }
             - { name: HINDSIGHT_API_AUDIT_LOG_ENABLED, value: "true" }
+            # SSRF guard blocks webhook delivery to private IPs by default;
+            # NPM and every other homelab service live on the 192.168.4.0/24
+            # LAN, so webhooks to those hosts need an explicit allowlist entry.
+            - { name: HINDSIGHT_API_WEBHOOK_ALLOWED_HOSTS, value: "192.168.4.0/24" }
           volumeMounts:
             - { name: data, mountPath: /home/hindsight/.pg0 }
           startupProbe:

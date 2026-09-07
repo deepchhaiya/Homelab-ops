@@ -1,0 +1,376 @@
+{
+  "name": "miniflux-curator-brief-v2",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "=/Notes/ObsidianNotes/Deep_Notes/Journal/curator-briefs/curator_brief_{{ $now.toISO() }}.md",
+        "fileContent": "={{ $json.brief }}"
+      },
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        560,
+        64
+      ],
+      "id": "a1bf4da7-174a-406f-9f48-f11224734cde",
+      "name": "Upload a file",
+      "credentials": {
+        "nextCloudApi": {
+          "id": "5SZGbVhphvbB42WM",
+          "name": "NextCloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "=Today's Brief posted in curator_brief_{{ $now.toISODate() }}.md in NextCloud",
+        "additionalFields": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        704,
+        64
+      ],
+      "id": "a5756c4f-6298-4d40-a5c1-aee108500584",
+      "name": "Create a message",
+      "credentials": {
+        "gotifyApi": {
+          "id": "lmxwOijsBie8YVq7",
+          "name": "Gotify miniflux curator token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -416,
+        64
+      ],
+      "id": "461b04aa-2119-4a36-8366-f74d3ca12f38",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "XkIpj3qeamNBLcBE",
+          "mode": "list",
+          "cachedResultName": "curator_items",
+          "cachedResultUrl": "/projects/3d9NGyVTJDWGNwmq/datatables/XkIpj3qeamNBLcBE"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "briefed",
+              "condition": "isFalse"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        64
+      ],
+      "id": "00551cd0-bdcc-46cc-8ec0-35c17d50092a",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; n8n-curator-brief/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 800
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "39f350eb-a7e3-436e-b794-eed0987a2b87",
+      "name": "Fetch URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -48,
+        64
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per Data Table row id that went into the brief, for the update node.\nconst ids = ($('Collect').first().json.briefed_ids || [])\n  .filter((x) => x !== null && x !== undefined);\nreturn ids.map((id) => ({ json: { row_id: id } }));\n"
+      },
+      "id": "90965067-85d1-4b25-85c6-e588befd8640",
+      "name": "Fan ids",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "XkIpj3qeamNBLcBE",
+          "cachedResultName": "curator_items"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.row_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "briefed": true,
+            "brief_kind": "daily"
+          }
+        },
+        "options": {}
+      },
+      "id": "a7eea2ea-19b1-42f3-9052-08daf3f4464e",
+      "name": "Mark briefed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// One item per article. Row data comes from Get row(s) via pairedItem;\n// the fetched page text (if any) is on $json.data from the Fetch URL node.\nconst row = $('Get row(s)').item.json;\nconst resp = $json || {};\n\nfunction clean(h) {\n  return String(h || '')\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&[a-z#0-9]+;/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nlet excerpt = '';\nif (resp && resp.data && !resp.error) excerpt = clean(resp.data).slice(0, 6000);\n\nconst SYS = [\n  'You are a precise technical research assistant. You are given ONE article: its title, URL, a curator note, and a text excerpt that may be truncated or empty.',\n  '',\n  'Work in this order and make AT MOST 2 tool calls total — never keep retrying a blocked site:',\n  '1. If the excerpt clearly contains the article substance, summarise from it (no tool calls).',\n  '2. Otherwise make ONE attempt to fetch the URL with your web tools.',\n  '3. If the page is still not usable (anti-bot / JS challenge / paywall / login wall / 404 / only markup), do ONE GENERAL WEB SEARCH about the article topic or title and summarise what reliable sources say about that subject.',\n  '',\n  'Output EXACTLY these three lines, nothing else:',\n  'Topic: <one line>',\n  'Source: <\"article\" if you summarised the actual page or excerpt | \"general web search\" if you used step 3>',\n  'Summary: <2 to 3 paragraphs of plain prose — key technical points, findings or arguments, and why they matter. If Source is \"general web search\", begin the first sentence with exactly: Based on general web search (the original article could not be accessed): . No bullet lists, no preamble, no commentary about your tools or process.>',\n].join('\\n');\n\nconst USER = 'TITLE: ' + (row.title || 'Untitled') +\n  '\\nURL: ' + (row.url || '') +\n  '\\nCURATOR NOTE: ' + (row.why || '') +\n  '\\n\\nEXCERPT:\\n' + (excerpt || '(none - fetch the URL, or fall back to a general web search)');\n\nreturn {\n  json: {\n    row_id: row.id,\n    title: row.title || 'Untitled',\n    url: row.url || '',\n    category: row.category || '',\n    bucket: row.bucket || '',\n    score: row.score != null ? row.score : '',\n    messages: [\n      { role: 'system', content: SYS },\n      { role: 'user', content: USER },\n    ],\n  },\n};\n"
+      },
+      "id": "e8ed232d-06a0-4364-b869-44faba370b17",
+      "name": "Prep item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://hermes-agent.hermes-agent.svc.cluster.local:8642/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, messages: $json.messages } }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          },
+          "timeout": 200000
+        }
+      },
+      "id": "6e4840e6-f958-4f8a-b396-bd4a425a046f",
+      "name": "Hermes summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        256,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "sclY6NTkAb7qJnGp",
+          "name": "Hermes Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble one markdown brief from the per-item Hermes responses.\nconst results = $input.all();\nconst prepped = $('Prep item').all().map((x) => x.json);\nconst today = new Date().toISOString().slice(0, 10);\n\nconst lines = [\n  `# Miniflux Curator Brief — ${today}`,\n  '',\n  `${prepped.length} curated item(s) (curator score >= 5). Per-article summaries by Hermes.`,\n  '',\n];\nconst briefed_ids = [];\n\nprepped.forEach((p, i) => {\n  if (p.row_id !== undefined && p.row_id !== null) briefed_ids.push(p.row_id);\n  const r = results[i] ? results[i].json : {};\n  let text = '';\n  if (r && r.choices && r.choices[0] && r.choices[0].message) {\n    text = String(r.choices[0].message.content || '').trim();\n  } else if (r && r.error) {\n    text = `(summary failed: ${r.error.message || r.error})`;\n  }\n  lines.push(`## ${i + 1}. ${p.title}`);\n  lines.push(p.url);\n  lines.push(`*${p.category} · ${p.bucket} · score ${p.score}*`);\n  lines.push('');\n  lines.push(text || '(no summary returned)');\n  lines.push('');\n});\n\nreturn [{ json: { brief: lines.join('\\n'), total_items: prepped.length, briefed_ids, generated: today } }];\n"
+      },
+      "id": "a146147d-c375-4262-af3d-abc5b268e965",
+      "name": "Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        64
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Upload a file": {
+      "main": [
+        [
+          {
+            "node": "Create a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Fetch URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a message": {
+      "main": [
+        [
+          {
+            "node": "Fan ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fan ids": {
+      "main": [
+        [
+          {
+            "node": "Mark briefed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch URL": {
+      "main": [
+        [
+          {
+            "node": "Prep item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep item": {
+      "main": [
+        [
+          {
+            "node": "Hermes summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hermes summarize": {
+      "main": [
+        [
+          {
+            "node": "Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "6BhhF0XpgnlXoyap",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "executionTimeout": 1800
+  },
+  "versionId": "5de8823f-0ab7-4db4-97bb-16aaeec2447f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "3d261420f88c71f8f7cdbd56d0ac691341e1acab7c330b978ff2b8fa16d36aae"
+  },
+  "nodeGroups": [],
+  "id": "r1lkdyjINvMfEltY",
+  "tags": []
+}
