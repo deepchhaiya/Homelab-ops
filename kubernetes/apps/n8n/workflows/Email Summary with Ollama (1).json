@@ -1,0 +1,621 @@
+{
+  "name": "Email Summary with Ollama",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -544,
+        80
+      ],
+      "id": "71d1127a-8a6d-4909-b968-bac7df18869d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "readStatus": "unread",
+          "receivedAfter": "={{ $now.minus({days: 1}) }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        0
+      ],
+      "id": "3bf10116-70de-4c95-9c0d-c050294ded2b",
+      "name": "Gmail Account 1",
+      "webhookId": "65497ae5-6a27-4c04-8b2d-20a8124a37e4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mpdqOnX5eowQG1Lp",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "readStatus": "unread",
+          "receivedAfter": "={{ $now.minus({days: 1}) }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        208
+      ],
+      "id": "9f69b60f-2274-4a3a-a9f6-cd1a845293a1",
+      "name": "Gmail Account 2",
+      "webhookId": "a576e2a6-e507-4743-80c2-b43344031db4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        176,
+        80
+      ],
+      "id": "5ddd4b23-c9c7-4f46-99d4-fbf617ab45e6",
+      "name": "Merge Emails from Both Accounts"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.finalMessage }}",
+        "additionalFields": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        160
+      ],
+      "id": "cb90bb71-86ed-413f-9157-138c9a813bd2",
+      "name": "Send Summary Notification",
+      "credentials": {
+        "gotifyApi": {
+          "id": "KWqmHAV9y44UIBqE",
+          "name": "Gotify Gmail Summaries"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -144,
+        400
+      ],
+      "id": "038c8e30-8a4b-470d-aed5-3c303dfdfdca",
+      "name": "Loop Over Items",
+      "retryOnFail": false,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        400
+      ],
+      "id": "c45405af-28bf-4186-a8b8-bc336c3aa2ca",
+      "name": "Mark a message as read",
+      "webhookId": "4e3e6562-5a21-4f20-bf52-44e97768110b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -64,
+        -192
+      ],
+      "id": "2a5c9c19-39f5-4b71-b8f8-14116a430818",
+      "name": "Loop Over Items1",
+      "retryOnFail": false,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        -176
+      ],
+      "id": "6788589a-30e5-4d73-ae33-3e2a9113c8a2",
+      "name": "Mark a message as read1",
+      "webhookId": "4e3e6562-5a21-4f20-bf52-44e97768110b",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mpdqOnX5eowQG1Lp",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mailboxIndex",
+              "name": "mailboxIndex",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c59002df-c27d-4f0f-bb51-a227652f2f16",
+      "name": "Tag Mailbox 1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -80,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mailboxIndex",
+              "name": "mailboxIndex",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f8df1a98-9254-45be-ae58-ddbe515edc61",
+      "name": "Tag Mailbox 2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -144,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Runs once per email (from either mailbox, after the merge).\nconst row = $json;\n\nconst SYS = `You are an email triage assistant for a personal inbox. You will be given ONE email's sender, subject, and a short preview/snippet. Score how important it is for the recipient to actually read it, on a 0-10 scale, and classify it into exactly one category.\n\nCategories: health, security, financial, work, personal, scheduling, promotional, newsletter, other.\n\nScoring guidance:\n- 8-10: health/medical results or messages (e.g. lab/diagnostic results, doctor messages, prescription notices), security alerts (login/password/breach), urgent financial deadlines (overdue bills, fraud alerts), time-critical personal/family messages, job interviews.\n- 5-7: work items needing action, appointment confirmations/reminders, non-urgent bills, moderately important personal correspondence.\n- 2-4: informational updates, receipts, low-urgency notifications.\n- 0-1: promotional/marketing emails, sales, newsletters, social-media notifications, spam.\n\nAlways score health results and security alerts high (8+) and promotional/marketing/newsletter content low (0-2), even if the subject line uses urgent-sounding marketing language (\"Last chance!\", \"Sale ends today\", \"24 hours left\").\n\nRespond with ONLY valid JSON, no other text, in exactly this shape:\n{\"score\": <integer 0-10>, \"category\": \"<one category from the list above>\", \"urgent\": <true or false>, \"summary\": \"<one or two plain sentences on what the email is about and why it matters, or why it doesn't>\"}`;\n\nconst USER = `From: ${row.From || 'Unknown'}\\nSubject: ${row.Subject|| '(No Subject)'}\\nPreview: ${row.snippet || '(no preview available)'}`;\n\nconst idx = row.mailboxIndex !== undefined ? row.mailboxIndex : 0;\nconst id = row.id || '';\n\nreturn {\n  id,\n  mailboxIndex: idx,\n  from: row.From || 'Unknown',\n  subject: row.Subject || '(No Subject)',\n  snippet: row.snippet || '',\n  link: id ? `https://mail.google.com/mail/u/${idx}/#all/${id}` : '',\n  messages: [\n    { role: 'system', content: SYS },\n    { role: 'user', content: USER },\n  ],\n};\n"
+      },
+      "id": "e2591087-dcf9-4a9a-8367-65fb8612caf3",
+      "name": "Prep item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://hermes-agent.hermes-agent.svc.cluster.local:8642/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, messages: $json.messages } }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "7cc51823-647a-41bc-9305-e48aef21d976",
+      "name": "Hermes score email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        640,
+        80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "sclY6NTkAb7qJnGp",
+          "name": "Hermes Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const prep = $('Prep item').item.json;\nconst resp = $json || {};\n\nlet raw = '';\nif (resp.choices && resp.choices[0] && resp.choices[0].message) {\n  raw = String(resp.choices[0].message.content || '');\n}\n\nfunction parseScore(text) {\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (!match) return null;\n  try {\n    return JSON.parse(match[0]);\n  } catch (e) {\n    return null;\n  }\n}\n\nconst parsed = parseScore(raw) || {};\nconst score = Number.isFinite(Number(parsed.score)) ? Math.max(0, Math.min(10, Number(parsed.score))) : 5;\nconst category = typeof parsed.category === 'string' ? parsed.category.toLowerCase() : 'other';\nconst urgent = parsed.urgent === true;\nconst summary = typeof parsed.summary === 'string' && parsed.summary.trim()\n  ? parsed.summary.trim()\n  : (raw ? raw.slice(0, 200) : '(Hermes did not return a usable summary)');\n\nconst THRESHOLD = 4;\n\nreturn {\n  id: prep.id,\n  mailboxIndex: prep.mailboxIndex,\n  from: prep.from,\n  subject: prep.subject,\n  link: prep.link,\n  category,\n  score,\n  urgent,\n  summary,\n  notified: score >= THRESHOLD,\n};\n"
+      },
+      "id": "91224b0a-28a0-484c-a08a-e872868d2e79",
+      "name": "Parse score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "brjYQr2S3zEEN3vf",
+          "cachedResultName": "email_digest"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "entry_id": "={{ $json.id }}",
+            "mailbox": "={{ $json.mailboxIndex }}",
+            "from_addr": "={{ $json.from }}",
+            "subject": "={{ $json.subject }}",
+            "category": "={{ $json.category }}",
+            "score": "={{ $json.score }}",
+            "urgent": "={{ $json.urgent }}",
+            "summary": "={{ $json.summary }}",
+            "link": "={{ $json.link }}",
+            "notified": "={{ $json.notified }}",
+            "created_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "fc71b7f7-4463-452a-95a3-b3d74929a1e8",
+      "name": "Log to email_digest",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.score }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 4
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3f53b42b-27f0-4dfd-bce5-654872ac4252",
+      "name": "Filter important",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1072,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "score",
+              "order": "descending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1ae5e4b-a590-4f8a-9f5c-02f7111f1e83",
+      "name": "Sort by score desc",
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map((i) => i.json);\n\nfunction emoji(score) {\n  if (score >= 8) return '🔴';\n  if (score >= 6) return '🟠';\n  return '🟡';\n}\n\nconst blocks = items.map((e) => {\n  const tag = e.urgent ? ' · URGENT' : '';\n  return `${emoji(e.score)} ${e.score}/10 · ${e.category}${tag}\\n${e.subject}\\nFrom: ${e.from}\\n${e.summary}\\n🔗 ${e.link}`;\n});\n\nconst finalMessage = `📧 Email Digest — ${items.length} important email(s)\\n\\n${blocks.join('\\n\\n')}`;\n\nreturn [{ json: { finalMessage } }];\n"
+      },
+      "id": "0de4f2f7-f478-43c8-9b03-318e0b3f7482",
+      "name": "Build Gotify Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Gmail Account 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail Account 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Account 1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tag Mailbox 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Account 2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tag Mailbox 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mark a message as read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark a message as read": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mark a message as read1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark a message as read1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Mailbox 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails from Both Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Mailbox 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails from Both Accounts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Emails from Both Accounts": {
+      "main": [
+        [
+          {
+            "node": "Prep item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep item": {
+      "main": [
+        [
+          {
+            "node": "Hermes score email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hermes score email": {
+      "main": [
+        [
+          {
+            "node": "Parse score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse score": {
+      "main": [
+        [
+          {
+            "node": "Log to email_digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter important",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter important": {
+      "main": [
+        [
+          {
+            "node": "Sort by score desc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by score desc": {
+      "main": [
+        [
+          {
+            "node": "Build Gotify Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gotify Message": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "America/Chicago",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "6BhhF0XpgnlXoyap"
+  },
+  "versionId": "03b4e118-5767-4a02-bc68-fcd1006a74c7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "3d261420f88c71f8f7cdbd56d0ac691341e1acab7c330b978ff2b8fa16d36aae"
+  },
+  "nodeGroups": [],
+  "id": "HsaRrtLCGFUjvJe1",
+  "tags": [
+    {
+      "updatedAt": "2026-01-08T04:31:56.296Z",
+      "createdAt": "2026-01-08T04:31:56.296Z",
+      "id": "gTcX623pWd1tziQN",
+      "name": "Productivity"
+    }
+  ]
+}

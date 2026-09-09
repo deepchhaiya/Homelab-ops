@@ -16,6 +16,7 @@ Usage:
   ssh_run.py evox2  "systemctl status ollama"
   ssh_run.py peladn "pct exec 202 -- docker logs jellyfin --tail=20"
   ssh_run.py peladn "pct exec 203 -- docker logs homeassistant --tail=20"
+  ssh_run.py peladn "pct exec 202 -- docker exec immich-server cat /usr/src/app/.env"
   ssh_run.py evox2  "pct exec 200 -- proxmox-backup-manager datastore list"
   ssh_run.py peladn "curl -s http://192.168.4.141:30800/health"
 
@@ -38,7 +39,10 @@ HOSTS = {
 # reach them via `ssh_run.py peladn "pct exec 203 -- ..."` and
 # `ssh_run.py evox2  "pct exec 200 -- ..."` respectively. The Proxmox host
 # already trusts our key; pct exec drops into the LXC; the recursive allowlist
-# check still validates the inner command. One key, two hosts, all LXCs covered.
+# check still validates the inner command. `docker exec <ctr> <cmd>` nests the
+# same way (and composes: `pct exec NN -- docker exec <ctr> <cmd>`) — the
+# in-container command is re-validated against this same allowlist, and no
+# `docker exec` option flags are accepted. One key, two hosts, all LXCs covered.
 
 # Allowed binaries → list of allowed verbs (the FIRST non-flag token after the binary).
 # Use ["*"] for binaries where any usage is read-only (ls, cat, df, etc.).
@@ -104,7 +108,13 @@ DENIED_SUBSTRINGS = [
     " systemctl reload ", " systemctl disable ", " systemctl enable ",
     " systemctl mask ", " systemctl unmask ", " systemctl reset-failed",
     " docker stop", " docker rm", " docker restart", " docker kill",
-    " docker run", " docker exec", " docker pull", " docker build",
+    " docker run", " docker pull", " docker build",
+    " docker create", " docker cp", " docker commit", " docker update",
+    " docker system prune", " docker container rm", " docker container stop",
+    " docker container kill", " docker container prune",
+    " docker network create", " docker network rm", " docker network prune",
+    " docker volume create", " docker volume rm", " docker volume prune",
+    " docker image rm", " docker image prune",
     " kubectl delete", " kubectl create", " kubectl apply",
     " kubectl patch", " kubectl edit", " kubectl scale",
     " kubectl rollout", " kubectl replace", " kubectl annotate",
@@ -180,6 +190,14 @@ def find_verb(tokens, start=1):
     return None, i
 
 
+def is_docker_exec(tokens):
+    """True for `docker exec ...` and the `docker container exec ...` alias."""
+    return (
+        (len(tokens) >= 2 and tokens[1] == "exec")
+        or (len(tokens) >= 3 and tokens[1] == "container" and tokens[2] == "exec")
+    )
+
+
 def validate(cmd):
     """Return (allowed: bool, reason: str)."""
     if not cmd.strip():
@@ -219,6 +237,33 @@ def validate(cmd):
             return True, "ok"
         except ValueError:
             return False, "pct exec requires `--` separator and an inner command"
+
+    # docker exec <container> <inner-cmd>: same nested allowlist model as
+    # `pct exec`. NO option flags are accepted — privilege-escalation
+    # (-u/--user/--privileged), tty (-i/-t) and detach (-d/--detach) flags,
+    # including bundled short forms like -it / -itd / -uroot, are all rejected
+    # because no read-only use case needs them and each widens the blast radius
+    # (docker.sock is mounted in some containers => root on the Docker host).
+    # The command run *inside* the container is validated recursively here.
+    if binary == "docker" and is_docker_exec(tokens):
+        rest = tokens[3:] if tokens[1] == "container" else tokens[2:]
+        if not rest:
+            return False, "docker exec requires <container> <command>"
+        if rest[0].startswith("-"):
+            return False, (
+                f"docker exec flag {rest[0]!r} not allowed — no privilege "
+                f"(-u/--user/--privileged), tty (-i/-t) or detach (-d/--detach) "
+                f"flags, including bundled forms like -it/-itd/-uroot; use "
+                f"`docker exec <container> <read-only cmd>`"
+            )
+        inner_tokens = rest[1:]  # rest[0] is the container name
+        if not inner_tokens:
+            return False, "docker exec requires a command after the container name"
+        inner = " ".join(shlex.quote(t) for t in inner_tokens)
+        ok, reason = validate(inner)
+        if not ok:
+            return False, f"docker exec inner cmd rejected: {reason}"
+        return True, "ok"
 
     # Lookup binary
     if binary not in ALLOWED:
