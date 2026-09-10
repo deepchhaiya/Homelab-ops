@@ -28,3 +28,9 @@ cluster.env
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Grafana community dashboards pulled at deploy time by fetch-dashboards.sh
+# (large, upstream-owned, pinned only by gnetId in the script)
+infrastructure/observability-lxc/grafana/provisioning/dashboards/json/node-exporter-full.json
+infrastructure/observability-lxc/grafana/provisioning/dashboards/json/loki-logs.json
+infrastructure/observability-lxc/grafana/provisioning/dashboards/json/*.ct405-bak
