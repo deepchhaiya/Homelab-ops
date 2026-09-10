@@ -8,7 +8,8 @@ For commands that mutate state (restart, kill, delete, mkfs), use ssh_exec.py
 which gates on user confirmation.
 
 Reads (from env):
-  HERMES_SSH_KEY  default: /opt/data/.ssh/id_ed25519 (copied + chowned by init container)
+  HERMES_SSH_KEY          default: /opt/data/.ssh/id_ed25519 (copied + chowned by init container)
+  HERMES_SSH_KNOWN_HOSTS  default: /opt/data/.ssh/known_hosts (override when running outside the pod)
 
 Usage:
   ssh_run.py <host> "<command>"
@@ -30,6 +31,7 @@ Add --json for raw subprocess output as JSON.
 import argparse, ipaddress, json, os, shlex, subprocess, sys, urllib.parse
 
 SSH_KEY = os.environ.get("HERMES_SSH_KEY", "/opt/data/.ssh/id_ed25519")
+KNOWN_HOSTS = os.environ.get("HERMES_SSH_KNOWN_HOSTS", "/opt/data/.ssh/known_hosts")
 
 HOSTS = {
     "peladn": "192.168.4.150",
@@ -291,7 +293,7 @@ def run_ssh(host_alias, cmd, as_json):
     ssh_argv = [
         "ssh", "-i", SSH_KEY,
         "-o", "StrictHostKeyChecking=accept-new",
-        "-o", "UserKnownHostsFile=/opt/data/.ssh/known_hosts",
+        "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
         "-o", "ConnectTimeout=10",
         "-o", "BatchMode=yes",
         f"root@{ip}", cmd,

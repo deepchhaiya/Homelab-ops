@@ -11,7 +11,10 @@ executing. The model must:
      so this tool can log the audit trail.
 
 Reads (from env):
-  HERMES_SSH_KEY  default: /etc/hermes-ssh/id_ed25519
+  HERMES_SSH_KEY          default: /opt/data/.ssh/id_ed25519
+  HERMES_SSH_KNOWN_HOSTS  default: /tmp/hermes-known-hosts (override when running outside the pod)
+  HERMES_AUDIT_LOG        default: /opt/data/logs/ssh-exec-audit.log (override when running outside the pod)
+  GOTIFY_URL / GOTIFY_TOKEN / LOKI_URL   best-effort audit fan-out
 
 Usage (dry-run, always start here):
   ssh_exec.py peladn "systemctl restart nfs-server" --dry-run
@@ -23,15 +26,18 @@ Hosts (Proxmox VE nodes only — LXCs reached via `pct exec`):
   peladn  -> root@192.168.4.150
   evox2   -> root@192.168.4.84
 
-Every executed command is appended to /opt/data/logs/ssh-exec-audit.log with:
+Every executed command is appended to $HERMES_AUDIT_LOG (default
+/opt/data/logs/ssh-exec-audit.log) with:
   timestamp, host, command, user-confirmation-quote, exit-code.
 """
+from __future__ import annotations  # allow `str | None` hints on Python < 3.10 (e.g. host system python)
 import argparse, json, os, subprocess, sys, urllib.parse, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 SSH_KEY = os.environ.get("HERMES_SSH_KEY", "/opt/data/.ssh/id_ed25519")
-AUDIT_LOG = Path("/opt/data/logs/ssh-exec-audit.log")
+KNOWN_HOSTS = os.environ.get("HERMES_SSH_KNOWN_HOSTS", "/tmp/hermes-known-hosts")
+AUDIT_LOG = Path(os.environ.get("HERMES_AUDIT_LOG", "/opt/data/logs/ssh-exec-audit.log"))
 
 # Gotify push notification on every actual execution (best-effort).
 GOTIFY_URL = os.environ.get("GOTIFY_URL", "").rstrip("/")
@@ -296,7 +302,7 @@ def main():
     ssh_argv = [
         "ssh", "-i", SSH_KEY,
         "-o", "StrictHostKeyChecking=accept-new",
-        "-o", "UserKnownHostsFile=/tmp/hermes-known-hosts",
+        "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
         "-o", "ConnectTimeout=15",
         "-o", "BatchMode=yes",
         f"root@{ip}", a.command,
