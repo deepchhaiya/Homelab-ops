@@ -1,0 +1,307 @@
+{
+  "name": "peladn-failover",
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://prop.dkghar.duckdns.org/api2/json/version",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "timeout": 10000
+        }
+      },
+      "id": "c1096d3e-63e1-4cbb-9560-3155f73b6953",
+      "name": "Check Peladn API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -768,
+        80
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1RKIjAplgCr1Pbsp",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst item = $input.first().json;\nconst healthy = !!(item && item.data && item.data.version);\nif (healthy) { sd.failCount = 0; return [{ json: { alert: false, count: 0 } }]; }\nsd.failCount = (sd.failCount || 0) + 1;\n// alert exactly once, at the 3rd consecutive miss (~6 min), to avoid spam\nreturn [{ json: { alert: sd.failCount === 3, count: sd.failCount } }];"
+      },
+      "id": "fb4a5a77-cfa1-4762-9a12-7bbaaf128fa1",
+      "name": "3-strike counter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ea8198b0-7f5e-421b-b013-c1dc34eec505",
+      "name": "Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "peladn-failover",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a2dc59dc-31ec-4e0f-bc2f-60a7c17e5950",
+      "name": "Failover Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        432
+      ],
+      "webhookId": "peladn-failover"
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "curl -fsSL https://raw.githubusercontent.com/DeepAchut/Homelab-ops/main/infrastructure/failover/peladn-failover.sh -o /usr/local/bin/peladn-failover.sh 2>/dev/null || true; chmod +x /usr/local/bin/peladn-failover.sh; bash /usr/local/bin/peladn-failover.sh 2>&1 | tail -30"
+      },
+      "id": "918a037f-615d-4b4a-ae3a-04c8a33bc766",
+      "name": "SSH Evo-X2: run failover",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        432
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "gjXzoiWjfRaT0ee4",
+          "name": "Evo-x2 proxmox credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Watchdog Failover",
+        "height": 336,
+        "width": 1296
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        -96
+      ],
+      "id": "0a08f6f3-b68a-4078-8ed0-cdbd4104c67f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "sendTo": "deepkchhaiya@gmail.com",
+        "subject": "Urgent: Peladn Down for 30 Minutes",
+        "message": "Peladn HA-4 is down for 30 minutes. Initiating a failover to Evo-x2. Check n8n workflow.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -112,
+        -16
+      ],
+      "id": "053bd4d7-7349-4a94-a069-8e1386356f71",
+      "name": "Send a message",
+      "webhookId": "399a9a60-2dcf-451f-bd03-aa914fe53e62",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "deepkchhaiya@gmail.com",
+        "subject": "Urgent: Starting Failover script on Peladn",
+        "message": "Since Peladn HA-4 is down for 30 minutes. Initiating a failover script in Evo-x2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -544,
+        432
+      ],
+      "id": "ea38b987-5a43-4358-a3ca-b3039f6488b6",
+      "name": "Send a message1",
+      "webhookId": "399a9a60-2dcf-451f-bd03-aa914fe53e62",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "deepkchhaiya@gmail.com",
+        "subject": "Urgent: Failover finished to Evo-x2",
+        "message": "=Failover to Evo-x2 finished. \\n {{ $json.stdout || $json.stderr || 'failover finished \u2014 check n8n execution' }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -96,
+        432
+      ],
+      "id": "b866a54a-d432-4c1a-9b73-278b728864be",
+      "name": "Send a message2",
+      "webhookId": "399a9a60-2dcf-451f-bd03-aa914fe53e62",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "e4d75250-52bc-44d0-89ea-810435bd9a99",
+      "name": "Every 10 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -992,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Check Peladn API": {
+      "main": [
+        [
+          {
+            "node": "3-strike counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3-strike counter": {
+      "main": [
+        [
+          {
+            "node": "Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert?": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failover Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SSH Evo-X2: run failover": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        [
+          {
+            "node": "SSH Evo-X2: run failover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 10 min": {
+      "main": [
+        [
+          {
+            "node": "Check Peladn API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
