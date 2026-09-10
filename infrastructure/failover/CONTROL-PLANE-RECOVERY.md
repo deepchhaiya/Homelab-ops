@@ -129,8 +129,8 @@ talosctl apply-config --insecure -n <new-node-maintenance-ip> --file /root/dr/co
 ### B3. Bootstrap FROM the snapshot
 
 ```bash
-SNAP=$(ssh talossnap@192.168.4.84 true 2>/dev/null; \
-       ls -1t /mnt/backup-hdd/talos-etcd-snapshots/etcd_*.db | head -1)   # newest
+# snapshots already live on this host (Evo-X2), mirrored every 12 h
+SNAP=$(ls -1t /mnt/backup-hdd/talos-etcd-snapshots/etcd_*.db | head -1)   # newest
 talosctl bootstrap -n 192.168.4.172 -e 192.168.4.172 --recover-from "$SNAP"
 ```
 

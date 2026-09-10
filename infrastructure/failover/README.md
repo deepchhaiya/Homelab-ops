@@ -102,12 +102,15 @@ rm -f .env
 - ✅ **etcd-snapshot layer** — `talos-backup.sh` (see `../peladn-host/backup-scripts/`)
   mirrors a `talosctl etcd snapshot` to `evox2:/mnt/backup-hdd/talos-etcd-snapshots/`
   every 12 h. Low-RPO input for Path B. (Was silently broken 2026-05 → 2026-09-10.)
-- ✅ `peladn-failover` workflow imported; watchdog + failover flows built; webhook has
-  Basic Auth; alert email carries the trigger `curl`.
-- ⬜ Activate the `peladn-failover` workflow (still draft).
+- ✅ `peladn-failover` workflow **published/active** — watchdog + failover flows,
+  webhook Basic Auth, alert email carries the trigger `curl`. Schedule set to 12 h.
+- ✅ `talosctl` **v1.12.6 installed** on the Evo-X2 host (`/usr/local/bin/talosctl`) for Path B.
+- ✅ Offline decrypted CP config at **`evox2:/root/dr/controlplane.yaml`** (mode 0400,
+  `talosctl validate --mode metal` passes) — usable in Path B without Vaultwarden.
 - ⬜ OPNsense reservation for the CP MAC `BC:24:11:C1:FB:D7 → 192.168.4.172` (so a
   restored VM 201 on Evo-X2 keeps the endpoint IP).
-- ⬜ Install `talosctl` on the Evo-X2 host (needed for Path B).
 - ⬜ First real drill — see the runbook's "Drill" section. Planned for a weekend window.
+- ⬜ Refresh `evox2:/root/dr/controlplane.yaml` whenever the machine config changes
+  (`sops -d kubernetes/talos/controlplane.enc.yaml`).
 - ⬜ Watchdog cadence is 10 min → ~30 min to first alert, and it alerts only once
   (no re-alert if it stays down). Tune if you want faster / repeated notice.
