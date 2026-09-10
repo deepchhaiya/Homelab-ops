@@ -107,8 +107,8 @@ rm -f .env
 - ✅ `talosctl` **v1.12.6 installed** on the Evo-X2 host (`/usr/local/bin/talosctl`) for Path B.
 - ✅ Offline decrypted CP config at **`evox2:/root/dr/controlplane.yaml`** (mode 0400,
   `talosctl validate --mode metal` passes) — usable in Path B without Vaultwarden.
-- ⬜ OPNsense reservation for the CP MAC `BC:24:11:C1:FB:D7 → 192.168.4.172` (so a
-  restored VM 201 on Evo-X2 keeps the endpoint IP).
+- ✅ OPNsense static reservation `BC:24:11:C1:FB:D7 → 192.168.4.172` in place — a
+  restored VM 201 on Evo-X2 keeps the endpoint IP automatically.
 - ⬜ First real drill — see the runbook's "Drill" section. Planned for a weekend window.
 - ⬜ Refresh `evox2:/root/dr/controlplane.yaml` whenever the machine config changes
   (`sops -d kubernetes/talos/controlplane.enc.yaml`).
