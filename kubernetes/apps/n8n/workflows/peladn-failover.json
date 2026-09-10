@@ -1,18 +1,9 @@
 {
   "name": "peladn-failover",
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": true
-  },
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "pinData": {},
   "nodes": [
     {
       "parameters": {
-        "url": "https://prop.dkghar.duckdns.org/api2/json/version",
+        "url": "https://192.168.4.150:8006/api2/json/version",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -28,13 +19,13 @@
         -768,
         80
       ],
-      "continueOnFail": true,
       "credentials": {
         "httpHeaderAuth": {
           "id": "1RKIjAplgCr1Pbsp",
           "name": "Header Auth account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -86,6 +77,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "peladn-failover",
+        "authentication": "basicAuth",
         "responseMode": "lastNode",
         "options": {}
       },
@@ -97,7 +89,13 @@
         -768,
         432
       ],
-      "webhookId": "peladn-failover"
+      "webhookId": "peladn-failover",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "6fzYUzoHZdyK8rRi",
+          "name": "Failover n8n Webhook credentials"
+        }
+      }
     },
     {
       "parameters": {
@@ -112,13 +110,13 @@
         -320,
         432
       ],
-      "continueOnFail": true,
       "credentials": {
         "sshPrivateKey": {
           "id": "gjXzoiWjfRaT0ee4",
           "name": "Evo-x2 proxmox credential"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -138,8 +136,8 @@
     {
       "parameters": {
         "sendTo": "deepkchhaiya@gmail.com",
-        "subject": "Urgent: Peladn Down for 30 Minutes",
-        "message": "Peladn HA-4 is down for 30 minutes. Initiating a failover to Evo-x2. Check n8n workflow.",
+        "subject": "⚠️ Peladn DOWN ~30 min (3 failed checks) — failover ready",
+        "message": "Peladn failed 3 consecutive health checks (~30 min unreachable at https://192.168.4.150:8006).\n\nIf you have CONFIRMED Peladn is really down, trigger failover to Evo-X2:\n\n  curl -sS -u 'n8n:<PASSWORD>' -X POST https://n8n.dkghar.duckdns.org/webhook/peladn-failover\n\nPassword: Vaultwarden -> \"Failover n8n Webhook credentials\" (username: n8n).\nVaultwarden runs on Peladn, so use your OFFLINE vault (phone/desktop app).\n\nOr trigger by hand in n8n:\n  https://n8n.dkghar.duckdns.org/workflow/j4GQTKqjKS9EJGQD\n\nA plain browser click will NOT work (webhook is POST + Basic Auth) — use the curl above.\n\nWhat failover does: restores VM 201 (Talos control plane) + CT 203 (home-ops)\n+ CT 202 (media-ai) from pbs-local on Evo-X2 and starts them. It auto-ABORTS if\nPeladn's API still answers (blip guard); override only with FORCE=1.\n\nDo NOT trigger on a suspected network blip — verify Peladn directly first\n(Proxmox UI / ssh root@192.168.4.150 / ping).",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -161,8 +159,8 @@
     {
       "parameters": {
         "sendTo": "deepkchhaiya@gmail.com",
-        "subject": "Urgent: Starting Failover script on Peladn",
-        "message": "Since Peladn HA-4 is down for 30 minutes. Initiating a failover script in Evo-x2",
+        "subject": "Peladn failover STARTED — restoring on Evo-X2",
+        "message": "Failover webhook received. Running peladn-failover.sh on Evo-X2 now:\nrestore VM 201 + CT 203 + CT 202 from pbs-local, then start them.\nA result email follows when the script finishes.",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -184,8 +182,8 @@
     {
       "parameters": {
         "sendTo": "deepkchhaiya@gmail.com",
-        "subject": "Urgent: Failover finished to Evo-x2",
-        "message": "=Failover to Evo-x2 finished. \\n {{ $json.stdout || $json.stderr || 'failover finished \u2014 check n8n execution' }}",
+        "subject": "Peladn failover FINISHED — verify cluster",
+        "message": "=Failover to Evo-X2 finished.\n\nVerify: kubectl get nodes  (ira-peladn-talos-cp should return Ready within a few minutes).\nBulk media rehydrates on demand — see the failover runbook §5.\n\n--- script output ---\n{{ $json.stdout || $json.stderr || 'no output captured — check the n8n execution log' }}",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -225,6 +223,7 @@
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Check Peladn API": {
       "main": [
@@ -303,5 +302,28 @@
         ]
       ]
     }
-  }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "f9857158-8e21-4921-9991-80b251a2f029",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "3d261420f88c71f8f7cdbd56d0ac691341e1acab7c330b978ff2b8fa16d36aae"
+  },
+  "nodeGroups": [],
+  "id": "j4GQTKqjKS9EJGQD",
+  "tags": [
+    {
+      "updatedAt": "2026-05-24T19:59:17.281Z",
+      "createdAt": "2026-05-24T19:59:17.281Z",
+      "id": "FU1MPv4hptcyPJ0f",
+      "name": "Homelab-ops"
+    }
+  ]
 }

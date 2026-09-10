@@ -25,3 +25,6 @@ docker/mem0-server/personal-context.txt
 
 # Local environment overrides
 cluster.env
+# macOS
+.DS_Store
+**/.DS_Store

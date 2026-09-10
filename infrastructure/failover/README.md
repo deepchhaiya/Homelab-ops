@@ -5,7 +5,9 @@ always-on **Evo-X2** if Peladn dies. The PBS backups already live on Evo-X2 (the
 CT200 were migrated there — see `../../` Phase 21 docs), so failover is just **restore
 locally → start**. No WOL, no sync, no second PBS.
 
-Full runbook: `Phase-21-Part-2 - failover-runbook-evox2.md` (in the docs repo root).
+**Step-by-step recovery runbook: [`CONTROL-PLANE-RECOVERY.md`](CONTROL-PLANE-RECOVERY.md)**
+(the older narrative `Phase-21-Part-2 - failover-runbook-evox2.md` in the docs root
+predates the merged workflow and the etcd-snapshot layer).
 
 ## Files
 
@@ -13,9 +15,13 @@ Full runbook: `Phase-21-Part-2 - failover-runbook-evox2.md` (in the docs repo ro
 |---|---|---|
 | `peladn-failover.sh` | Evo-X2 host | Restores 201/202/203 from `pbs-local` and starts them. Has a split-brain guard (refuses if Peladn API is still reachable; `FORCE=1` to override). |
 | `evox2-readiness.sh` | Evo-X2 host | Idempotent prep: adds `pbs-local` storage, creates stub dirs, installs the failover script. |
-| `n8n-peladn-watchdog.json` | n8n (RPi4) | Polls Peladn every 2 min; **alerts** after 3 misses. Does NOT auto-restore. |
-| `n8n-peladn-failover.json` | n8n (RPi4) | Webhook-triggered: notify → SSH Evo-X2 → pull+run `peladn-failover.sh` → notify. |
+| `CONTROL-PLANE-RECOVERY.md` | — | The runbook: detection → restore VM 201 (Path A) or etcd-snapshot recover (Path B) → verify → fail back. |
 | `.env` (gitignored) | — | `PBS_TOKEN_SECRET=…` for `evox2-readiness.sh` (only when adding `pbs-local` on a fresh host). |
+
+> The n8n side is **one** workflow — `peladn-failover` (`j4GQTKqjKS9EJGQD`) —
+> exported at [`../../kubernetes/apps/n8n/workflows/peladn-failover.json`](../../kubernetes/apps/n8n/workflows/peladn-failover.json).
+> It merges the old `n8n-peladn-watchdog.json` + `n8n-peladn-failover.json` (both
+> deleted); see "n8n workflow" below.
 
 ## How the GitOps retrieval works
 
@@ -33,22 +39,37 @@ So a `git push` to `main` is the deploy — n8n always runs the current version,
 on-host copy (installed by `evox2-readiness.sh`) is the offline fallback if GitHub is
 unreachable during an outage.
 
-## n8n workflows
+## n8n workflow
 
-Import the two JSONs (n8n → Workflows → Import from File), then:
+One merged workflow, `peladn-failover` (`j4GQTKqjKS9EJGQD`), exported to
+`../../kubernetes/apps/n8n/workflows/peladn-failover.json`. Two independent flows:
 
-1. **`peladn-watchdog`** — map an HTTP **Header Auth** credential holding a Peladn PVE API
-   token (`Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET`). Activate it. It alerts
-   once after ~6 min of downtime. Detection only — you decide when to fail over.
-2. **`peladn-failover`** — map the **SSH** credential for `root@192.168.4.84` (Evo-X2).
-   Trigger it deliberately (the webhook URL, or n8n "Execute"). It runs the restore and
-   notifies on completion.
+1. **Watchdog** — `Every 10 min` → GETs `https://192.168.4.150:8006/api2/json/version`
+   (direct LAN Proxmox API, *not* an NPM-proxied hostname, so "Peladn down" ≠ "NPM down") →
+   3-strike counter → **one Gmail alert** at ~30 min. Detection only; it does **not**
+   auto-fail-over. The alert email carries the exact `curl` command to trigger failover.
+2. **Failover** — webhook `POST /webhook/peladn-failover`, **Basic Auth** (cred
+   "Failover n8n Webhook credentials", user `n8n`; password in Vaultwarden — keep an
+   offline copy, Vaultwarden is on Peladn). On trigger: Gmail "STARTED" → SSH the
+   `Evo-x2 proxmox credential` key → `curl` the latest `peladn-failover.sh` from GitHub
+   raw + run it → Gmail "FINISHED" with script output. `continueOnFail` on the SSH node
+   so you always get the result email.
+
+Trigger it from the alert email:
+
+```bash
+curl -sS -u 'n8n:<PASSWORD>' -X POST https://n8n.dkghar.duckdns.org/webhook/peladn-failover
+```
 
 > ⚠️ **Notification channel must NOT live on Peladn.** Gotify runs in CT203 (home-ops) on
-> Peladn — it's **down during a Peladn failure**, so failover/watchdog alerts can't use it.
-> These workflows default to **ntfy.sh** (public, zero-infra, Peladn-independent) — set your
-> private topic in the two HTTP nodes. (Keep Gotify for normal/backup-success notices, which
-> happen while Peladn is up.) Alternatives: Telegram, or email via SMTP.
+> Peladn — it's **down during a Peladn failure**. This workflow uses **Gmail** (external,
+> Peladn-independent), which satisfies that. Keep Gotify for normal/backup-success notices
+> that fire while Peladn is up.
+>
+> ⚠️ **No clickable link.** The webhook is POST + Basic Auth; a browser click is an
+> unauthenticated GET (won't fire) and mail scanners *prefetch* links — dangerous for a
+> destructive action. The email carries a `curl` one-liner instead. A genuine one-click
+> trigger would need a `?token=` secret + a GET confirmation page that POSTs.
 
 ## Secrets & infra details (what's public vs private)
 
@@ -72,9 +93,21 @@ rm -f .env
 > host-key fingerprint) — not a credential. It's kept in `.env` purely to keep infra details
 > out of the public repo, not because it grants access.
 
-## Current state (2026-05-24)
+## Current state (2026-09-10)
 
-`evox2-readiness.sh` has already been applied to Evo-X2 (storage `pbs-local` active, stub
-dirs present, script installed). Remaining: import/activate the two n8n workflows, set the
-ntfy topic, add the OPNsense reservation for the Talos CP MAC `BC:24:11:C1:FB:D7 → .172`,
-and test a restore into throwaway IDs (Part 2 §9).
+- ✅ `evox2-readiness.sh` applied to Evo-X2 — `pbs-local` active, stub dirs present,
+  `peladn-failover.sh` installed at `/usr/local/bin/`.
+- ✅ VM 201 (Talos CP) + CT 202/203 backed up to `pbs-local` **weekly** (latest visible
+  `2026-09-07`). This is the RPO of Path A in the runbook.
+- ✅ **etcd-snapshot layer** — `talos-backup.sh` (see `../peladn-host/backup-scripts/`)
+  mirrors a `talosctl etcd snapshot` to `evox2:/mnt/backup-hdd/talos-etcd-snapshots/`
+  every 12 h. Low-RPO input for Path B. (Was silently broken 2026-05 → 2026-09-10.)
+- ✅ `peladn-failover` workflow imported; watchdog + failover flows built; webhook has
+  Basic Auth; alert email carries the trigger `curl`.
+- ⬜ Activate the `peladn-failover` workflow (still draft).
+- ⬜ OPNsense reservation for the CP MAC `BC:24:11:C1:FB:D7 → 192.168.4.172` (so a
+  restored VM 201 on Evo-X2 keeps the endpoint IP).
+- ⬜ Install `talosctl` on the Evo-X2 host (needed for Path B).
+- ⬜ First real drill — see the runbook's "Drill" section. Planned for a weekend window.
+- ⬜ Watchdog cadence is 10 min → ~30 min to first alert, and it alerts only once
+  (no re-alert if it stays down). Tune if you want faster / repeated notice.
