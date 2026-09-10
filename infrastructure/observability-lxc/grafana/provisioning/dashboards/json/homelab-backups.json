@@ -1,0 +1,180 @@
+{
+  "uid": "homelab-backups",
+  "title": "Homelab Backups",
+  "tags": ["backups", "homelab"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Oldest backup",
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 691200 },
+            { "color": "red", "value": 1209600 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "max(homelab_backup_age_seconds)", "instant": true, "legendFormat": "oldest" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Backups tracked",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "count(homelab_backup_age_seconds)", "instant": true } ]
+    },
+    {
+      "type": "stat",
+      "title": "Stale (> 14d)",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "sum(homelab_backup_age_seconds > bool 1209600) or on() vector(0)", "instant": true } ]
+    },
+    {
+      "type": "stat",
+      "title": "Total size (newest of each)",
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "sum(homelab_backup_size_bytes)", "instant": true } ]
+    },
+    {
+      "type": "row",
+      "title": "Freshness & size",
+      "id": 10,
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "panels": []
+    },
+    {
+      "type": "bargauge",
+      "title": "Backup age by job  (yellow > 8d, red > 14d)",
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 10, "w": 10, "x": 0, "y": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 691200 },
+            { "color": "red", "value": 1209600 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "showUnfilled": true,
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "homelab_backup_age_seconds", "instant": true, "legendFormat": "{{name}}" } ]
+    },
+    {
+      "type": "table",
+      "title": "Backups — age / size / files",
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 10, "w": 14, "x": 10, "y": 5 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "age" }, "properties": [
+            { "id": "unit", "value": "s" },
+            { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 691200 },
+              { "color": "red", "value": 1209600 } ] } }
+          ] },
+          { "matcher": { "id": "byName", "options": "size" }, "properties": [ { "id": "unit", "value": "bytes" } ] },
+          { "matcher": { "id": "byName", "options": "files" }, "properties": [ { "id": "unit", "value": "short" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "age", "desc": true } ] },
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+          "excludeByName": { "Time": true, "__name__": true, "host": true, "instance": true, "job": true },
+          "renameByName": { "name": "backup", "Value #A": "age", "Value #B": "size", "Value #C": "files" },
+          "indexByName": { "name": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3 }
+        } }
+      ],
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "homelab_backup_age_seconds", "instant": true, "format": "table" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "homelab_backup_size_bytes", "instant": true, "format": "table" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "homelab_backup_count", "instant": true, "format": "table" }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Trend",
+      "id": 20,
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Backup age over time",
+      "id": 21,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "homelab_backup_age_seconds", "legendFormat": "{{name}}" } ]
+    }
+  ]
+}

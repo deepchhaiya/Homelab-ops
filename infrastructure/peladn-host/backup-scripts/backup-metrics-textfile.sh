@@ -17,12 +17,14 @@ TMP="$OUT.$$"
 NOW=$(date +%s)
 
 # Backups to track:  <dir>|<glob>|<name-label>
+#   talos-etcd: the Peladn-side staging dir of talos-backup.sh — freshness there
+#   tracks the last successful `talosctl etcd snapshot` (mirrored to Evo-X2 every 12h).
 ENTRIES=(
   "/mnt/pvedas/k8s-backups|miniflux-postgres-*|miniflux-postgres"
   "/mnt/pvedas/k8s-backups|n8n-postgres-*|n8n-postgres"
   "/mnt/pvedas/k8s-backups|karakeep-postgres-*|karakeep-postgres"
   "/mnt/pvedas/pbs-config-backups|pbs-ct200-config-*|pbs-ct200-config"
-  "/mnt/pvedas/mem0-backups/claude-sessions|*|claude-sessions-daily"
+  "/home/n8n-backup/.cache/talos-etcd|etcd_*.db|talos-etcd"
 )
 
 {
