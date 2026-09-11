@@ -32,6 +32,16 @@ limits_config:
   ingestion_rate_mb: 8
   ingestion_burst_size_mb: 16
   allow_structured_metadata: true
+  retention_stream:
+    - selector: '{job="opnsense_dns"}'
+      priority: 10
+      period: 2160h             # 90 days — OPNsense Unbound per-query log
+    - selector: '{job="opnsense", program="filterlog"}'
+      priority: 20              # higher priority wins
+      period: 336h              # 14 days; raise once filterlog volume is measured
+  max_query_length: 2400h       # default 721h would reject 90-day queries
+  max_query_series: 2000        # default 500; 90d top-N panels exceed it
+  split_queries_by_interval: 12h  # default 1h = 2160 subqueries over 90d
 
 compactor:
   working_directory: /data/loki/compactor

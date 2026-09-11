@@ -19,19 +19,97 @@ loki.source.docker "default" {
   forward_to = [loki.write.local.receiver]
 }
 
-// OPNsense (and other network gear) remote syslog -> Loki (send as RFC5424)
+// ── OPNsense general syslog: filter, firewall, hostwatch, monit, suricata, wireguard ──
 loki.source.syslog "network" {
   listener {
     address                = "0.0.0.0:1514"
-    protocol               = "udp"
-    labels                 = { job = "opnsense", source = "syslog" }
+    protocol               = "tcp"
+    syslog_format          = "rfc5424"
+    labels                 = { job = "opnsense", source = "syslog", host = "opnsense" }
+    use_incoming_timestamp = true
+    max_message_length     = 32768   // Suricata EVE JSON blows past the 8192 default
+  }
+  // Must run here, not in a downstream loki.relabel: the source strips every
+  // __-prefixed label (incl. __syslog_message_app_name) before forwarding.
+  relabel_rules = loki.relabel.opnsense_program.rules
+  forward_to    = [loki.process.opnsense.receiver]
+}
+
+// Promote the syslog program name to a stream label — 6 values, safe cardinality.
+// Used only as relabel_rules above, so it forwards nowhere itself.
+loki.relabel "opnsense_program" {
+  forward_to = []
+  rule {
+    source_labels = ["__syslog_message_app_name"]
+    target_label  = "program"
+  }
+}
+
+loki.process "opnsense" {
+  // filterlog is CSV. Fields 5-9 sit at fixed positions for BOTH IPv4 and IPv6;
+  // everything after field 9 shifts between them, so don't extract further here.
+  stage.match {
+    selector = "{program=\"filterlog\"}"
+    stage.regex {
+      expression = "^[^,]*,[^,]*,[^,]*,[^,]*,(?P<iface>[^,]*),(?P<reason>[^,]*),(?P<action>[^,]*),(?P<dir>[^,]*),(?P<ipversion>[^,]*),"
+    }
+    stage.structured_metadata {
+      values = { iface = "", reason = "", action = "", dir = "", ipversion = "" }
+    }
+  }
+
+  // Suricata EVE-over-syslog is pure JSON
+  stage.match {
+    selector = "{program=\"suricata\"} |~ \"^\\\\{\""
+    stage.json {
+      expressions = {
+        alert_signature = "alert.signature",
+        alert_sid       = "alert.signature_id",
+        alert_severity  = "alert.severity",
+        src_ip          = "src_ip",
+        dest_ip         = "dest_ip",
+        dest_port       = "dest_port",
+        app_proto       = "app_proto",
+      }
+    }
+    stage.structured_metadata {
+      values = { alert_signature = "", alert_sid = "", alert_severity = "",
+                 src_ip = "", dest_ip = "", dest_port = "", app_proto = "" }
+    }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+// ── OPNsense Unbound per-query replies (resolver target) -> Loki, 90d stream ──
+// Needs Unbound Advanced: "Log Replies" + "Tag Queries and Replies" on.
+loki.source.syslog "opnsense_dns" {
+  listener {
+    address                = "0.0.0.0:1515"
+    protocol               = "tcp"
+    syslog_format          = "rfc5424"
+    labels                 = { job = "opnsense_dns", source = "unbound", host = "opnsense" }
     use_incoming_timestamp = true
   }
-  listener {
-    address                = "0.0.0.0:1514"
-    protocol               = "tcp"
-    labels                 = { job = "opnsense", source = "syslog" }
-    use_incoming_timestamp = true
+  forward_to = [loki.process.dns.receiver]
+}
+
+loki.process "dns" {
+  // keep only reply lines; drop unbound's startup/notice chatter
+  stage.match {
+    selector            = "{job=\"opnsense_dns\"} !~ \"reply: \""
+    action              = "drop"
+    drop_counter_reason = "not_a_dns_reply"
+  }
+
+  // reply: <client> <qname> <type> <class> <rcode> <secs> <cached 0|1> <pktlen>
+  stage.regex {
+    expression = "reply: (?P<client>\\S+) (?P<qname>\\S+) (?P<qtype>\\S+) (?P<qclass>\\S+) (?P<rcode>\\S+) (?P<resolve_s>[0-9.]+) (?P<cached>[01]) (?P<size>\\d+)"
+  }
+
+  // structured metadata, NOT labels — client/qname as labels would shatter the index.
+  // "qname", not "domain": domain is already a stream label (NPM pipeline).
+  stage.structured_metadata {
+    values = { client = "", qname = "", qtype = "", rcode = "", cached = "" }
   }
   forward_to = [loki.write.local.receiver]
 }
