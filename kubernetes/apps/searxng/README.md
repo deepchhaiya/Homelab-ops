@@ -82,6 +82,46 @@ Save. Then in any chat, toggle the **"Web Search"** option (globe icon under the
 - **No Redis sidecar** — SearXNG runs fine without it for single-pod homelab use. Adding Redis is a 2-pod tax for marginal speedup; revisit only if you start using SearXNG heavily in your browser too.
 - **NodePort instead of LoadBalancer** — matches the same pattern as mem0 (30800), karakeep (30801). NPM routes external traffic via the NodePort.
 
+## Keeping it reliable
+
+**What went wrong (found 2026-09-13):** SearXNG returned **0 results for every query for
+~3 months** and nobody noticed. Two causes, compounding:
+
+1. **Rotted scrapers.** `:latest` + `imagePullPolicy: Always` only pulls on a pod restart, and
+   the pod hadn't restarted in 93 days. Upstream fixes engine breakage constantly; on the old
+   build Google returned 0 silently and Yahoo threw protocol errors.
+2. **Blocked engines.** The upstream default set was all CAPTCHA'd or rate-limited from our
+   IP (duckduckgo, startpage, brave "too many requests", qwant "access denied"). SearXNG
+   suspends such engines *in memory* for up to 24 h, so once the whole set was suspended there
+   was nothing left. Heavy callers (the Hermes agent retrying searches) made it worse.
+
+A plain `kubectl -n searxng rollout restart deploy/searxng` fixed both — it pulled
+`2026.9.13+230c3632d` and cleared the suspensions.
+
+**What keeps it working now:**
+
+| Mechanism | File | Why |
+|---|---|---|
+| Diverse engine set | `configmap.yaml` → `engines:` | SearXNG merges whatever answers, so one engine getting blocked drops out instead of zeroing results. Adds bing, presearch, dogpile; disables qwant, mojeek, yahoo, wikidata (failing every call). Chosen from a per-engine probe. |
+| Daily canary + self-heal | `canary-cronjob.yaml` | 06:30 daily (before the 07:00 curator brief): probe 3 queries → if < 10 results total, `rollout restart` (fresh image + cleared suspensions) → re-probe → Gotify alert only if still broken. Sundays it restarts even when healthy, to pick up upstream engine fixes. |
+| Gotify token | `canary-secret.enc.yaml` | SOPS; reuses the Hermes Gotify app token. |
+
+The tag stays `:latest` on purpose — for a scraper, freshness matters more than pinning; the
+canary's restarts are what pull new builds.
+
+**Re-probe engines** (e.g. when the canary alerts), from any pod with wget:
+
+```bash
+for e in google bing duckduckgo brave startpage presearch dogpile qwant mojeek yahoo; do
+  printf "%-11s " $e
+  kubectl -n n8n exec deploy/n8n -c n8n -- sh -c \
+    "wget -qO- 'http://searxng.searxng.svc.cluster.local:8080/search?q=kubernetes&engines=$e&format=json'" \
+    | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d['results']),d.get('unresponsive_engines'))"
+done
+```
+
+**Run the canary by hand:** `kubectl -n searxng create job --from=cronjob/searxng-canary canary-manual && kubectl -n searxng logs -f job/canary-manual`
+
 ## Phase 2 ideas (deferred)
 
 - Add Redis sidecar if SearXNG becomes a daily browser-driver.

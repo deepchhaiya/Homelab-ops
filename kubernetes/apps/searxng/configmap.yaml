@@ -50,3 +50,32 @@ data:
       pool_connections: 100
       pool_maxsize: 20
       enable_http2: true
+
+    # Engine set, chosen from a per-engine probe on 2026-09-13 (build
+    # 2026.9.13+230c3632d, two queries each via `&engines=<name>`).
+    #
+    # Reliability comes from DIVERSITY: SearXNG merges whatever answers, so any
+    # one engine getting CAPTCHA'd or rate-limited just drops out instead of
+    # zeroing results. The previous config ran the upstream defaults, which on a
+    # stale image left only wikipedia/wikidata usable - 0 results for everything.
+    #
+    # Default-enabled engines not listed here (google, duckduckgo, brave,
+    # startpage, wikipedia) stay enabled.
+    engines:
+      # --- off by default upstream; answered reliably in the probe ---
+      - name: bing          # 10/10
+        disabled: false
+      - name: presearch     # 33/33
+        disabled: false
+        timeout: 8.0
+      - name: dogpile       # 34/35 (metasearch front-end, good redundancy)
+        disabled: false
+      # --- failing every request; disabled so they stop eating timeout budget ---
+      - name: qwant         # CAPTCHA
+        disabled: true
+      - name: mojeek        # HTTP errors
+        disabled: true
+      - name: yahoo         # parsing errors
+        disabled: true
+      - name: wikidata      # HTTP errors on every call (20/day in logs)
+        disabled: true

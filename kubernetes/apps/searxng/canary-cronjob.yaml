@@ -1,0 +1,164 @@
+# SearXNG canary: daily probe -> self-heal -> alert.
+#
+# Why: SearXNG ran for ~3 months returning 0 results for every query and nobody
+# noticed. Two failure modes cause that, and both are fixed by a pod restart:
+#   1. Engine scrapers rot as upstream sites change. The image is :latest with
+#      imagePullPolicy: Always, so a restart pulls the current build.
+#   2. Engines get CAPTCHA'd / rate-limited and SearXNG suspends them in memory
+#      (up to 24 h). A restart clears the suspensions.
+#
+# Flow (daily, before the 07:00 curator brief):
+#   probe 3 queries -> healthy: exit 0 (Sundays: restart anyway to pull fixes)
+#                   -> degraded: rollout restart -> re-probe
+#                        -> recovered: Gotify "self-healed" (low priority)
+#                        -> still bad: Gotify "SearXNG DOWN" (high priority), job fails
+#
+# Gotify lives on Peladn (CT203); if Peladn is down the alert is lost but the
+# job still fails visibly (kubectl get jobs -n searxng).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: searxng-canary
+  namespace: searxng
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: searxng-canary
+  namespace: searxng
+rules:
+  # `rollout restart` patches the deployment; `rollout status` watches it and its replicasets.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["searxng"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["list", "watch", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: searxng-canary
+  namespace: searxng
+subjects:
+  - kind: ServiceAccount
+    name: searxng-canary
+    namespace: searxng
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: searxng-canary
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-canary-script
+  namespace: searxng
+data:
+  canary.sh: |
+    #!/bin/sh
+    set -u
+    URL="http://searxng.searxng.svc.cluster.local:8080/search"
+    MIN_TOTAL="${MIN_TOTAL:-10}"   # summed across the 3 probe queries
+
+    count() {  # number of results in a SearXNG JSON response on stdin
+      if command -v jq >/dev/null 2>&1; then jq '.results | length' 2>/dev/null || echo 0
+      else grep -o '"url":' | wc -l | tr -d ' '; fi
+    }
+
+    probe() {
+      total=0
+      for q in "kubernetes+release+notes" "linux+kernel+news" "python+asyncio+tutorial"; do
+        n=$(curl -fsS -m 25 "$URL?q=$q&format=json" 2>/dev/null | count)
+        [ -z "$n" ] && n=0
+        echo "  q=$q -> $n" >&2
+        total=$((total + n))
+      done
+      echo "$total"
+    }
+
+    notify() {  # title, message, priority
+      [ -n "${GOTIFY_TOKEN:-}" ] || return 0
+      curl -fsS -m 10 -X POST "$GOTIFY_URL/message?token=$GOTIFY_TOKEN" \
+        -F "title=$1" -F "message=$2" -F "priority=$3" >/dev/null 2>&1 \
+        || echo "  (gotify unreachable)" >&2
+    }
+
+    restart() {
+      kubectl -n searxng rollout restart deploy/searxng
+      kubectl -n searxng rollout status deploy/searxng --timeout=300s
+      sleep 20   # let uwsgi workers warm up
+    }
+
+    echo "[canary] probing"
+    n=$(probe); echo "[canary] total results: $n (min $MIN_TOTAL)"
+
+    if [ "$n" -ge "$MIN_TOTAL" ]; then
+      if [ "$(date +%u)" = "7" ]; then
+        echo "[canary] healthy; Sunday -> weekly restart to pull upstream engine fixes"
+        restart
+      fi
+      exit 0
+    fi
+
+    echo "[canary] DEGRADED -> restarting (fresh :latest + clears engine suspensions)"
+    restart
+    n2=$(probe); echo "[canary] post-restart total: $n2"
+
+    if [ "$n2" -ge "$MIN_TOTAL" ]; then
+      notify "SearXNG self-healed" "Probe returned $n results; a restart brought it back to $n2." 4
+      exit 0
+    fi
+
+    notify "SearXNG DOWN" "Probe returned $n results, still $n2 after a restart. Web search is broken for Open WebUI, Hermes and the curator brief. Check: kubectl -n searxng logs deploy/searxng | grep ERROR" 8
+    exit 1
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: searxng-canary
+  namespace: searxng
+spec:
+  schedule: "30 6 * * *"          # 06:30 daily, ahead of the 07:00 curator brief
+  timeZone: "America/Chicago"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0             # the script already retries via restart; don't double up
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          serviceAccountName: searxng-canary
+          restartPolicy: Never
+          containers:
+            - name: canary
+              image: docker.io/alpine/k8s:1.35.2   # kubectl + curl + jq; matches cluster v1.35.2
+              command: ["/bin/sh", "/scripts/canary.sh"]
+              env:
+                - name: GOTIFY_URL
+                  value: "http://192.168.4.13:8800"
+                - name: GOTIFY_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: searxng-canary
+                      key: GOTIFY_TOKEN
+                      optional: true
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+          volumes:
+            - name: script
+              configMap:
+                name: searxng-canary-script
+                defaultMode: 0555
