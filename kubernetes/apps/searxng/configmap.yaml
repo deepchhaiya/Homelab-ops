@@ -51,31 +51,23 @@ data:
       pool_maxsize: 20
       enable_http2: true
 
-    # Engine set, chosen from a per-engine probe on 2026-09-13 (build
-    # 2026.9.13+230c3632d, two queries each via `&engines=<name>`).
+    # Engine overrides, verified 2026-09-13 against build 2026.9.13+230c3632d by
+    # checking each result's `engines` attribution (NOT result counts: an
+    # `&engines=<name>` probe for an unknown/inactive engine silently falls back
+    # to the default set and looks like it works).
     #
-    # Reliability comes from DIVERSITY: SearXNG merges whatever answers, so any
-    # one engine getting CAPTCHA'd or rate-limited just drops out instead of
-    # zeroing results. The previous config ran the upstream defaults, which on a
-    # stale image left only wikipedia/wikidata usable - 0 results for everything.
+    # Reliability comes from DIVERSITY: SearXNG merges whatever answers, so one
+    # engine getting CAPTCHA'd or rate-limited drops out instead of zeroing
+    # results. With these overrides the general set is:
+    #   google cse ~20, brave ~20, bing 10, duckduckgo ~10, wikipedia
+    # (google cse / brave / duckduckgo / wikipedia are default-enabled.)
     #
-    # Default-enabled engines not listed here (google, duckduckgo, brave,
-    # startpage, wikipedia) stay enabled.
+    # Every name here MUST exist in the build's defaults - an unknown name is
+    # parsed as a new engine with no `engine:` module. startpage, presearch and
+    # dogpile do NOT exist in this build. Check with:
+    #   curl -s .../config | jq '.engines[].name'
     engines:
-      # --- off by default upstream; answered reliably in the probe ---
-      - name: bing          # 10/10
+      - name: bing          # off by default upstream; 10/10 attributed to bing
         disabled: false
-      - name: presearch     # 33/33
-        disabled: false
-        timeout: 8.0
-      - name: dogpile       # 34/35 (metasearch front-end, good redundancy)
-        disabled: false
-      # --- failing every request; disabled so they stop eating timeout budget ---
-      - name: qwant         # CAPTCHA
-        disabled: true
-      - name: mojeek        # HTTP errors
-        disabled: true
-      - name: yahoo         # parsing errors
-        disabled: true
-      - name: wikidata      # HTTP errors on every call (20/day in logs)
+      - name: wikidata      # on by default; HTTP error on every call (20/day in logs)
         disabled: true

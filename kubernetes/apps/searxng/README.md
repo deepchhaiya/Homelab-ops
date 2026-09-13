@@ -102,7 +102,7 @@ A plain `kubectl -n searxng rollout restart deploy/searxng` fixed both — it pu
 
 | Mechanism | File | Why |
 |---|---|---|
-| Diverse engine set | `configmap.yaml` → `engines:` | SearXNG merges whatever answers, so one engine getting blocked drops out instead of zeroing results. Adds bing, presearch, dogpile; disables qwant, mojeek, yahoo, wikidata (failing every call). Chosen from a per-engine probe. |
+| Diverse engine set | `configmap.yaml` → `engines:` | SearXNG merges whatever answers, so one engine getting blocked drops out instead of zeroing results. Live set: google cse ~20, brave ~20, bing 10, duckduckgo ~10, wikipedia. Override enables bing and disables wikidata (HTTP error every call). Verified by per-result engine attribution, not counts. |
 | Daily canary + self-heal | `canary-cronjob.yaml` | 06:30 daily (before the 07:00 curator brief): probe 3 queries → if < 10 results total, `rollout restart` (fresh image + cleared suspensions) → re-probe → Gotify alert only if still broken. Sundays it restarts even when healthy, to pick up upstream engine fixes. |
 | Gotify token | `canary-secret.enc.yaml` | SOPS; reuses the Hermes Gotify app token. |
 
@@ -112,13 +112,18 @@ canary's restarts are what pull new builds.
 **Re-probe engines** (e.g. when the canary alerts), from any pod with wget:
 
 ```bash
-for e in google bing duckduckgo brave startpage presearch dogpile qwant mojeek yahoo; do
-  printf "%-11s " $e
+for e in "google cse" google bing duckduckgo brave qwant mojeek yahoo mwmbl; do
+  printf "%-11s " "$e"
   kubectl -n n8n exec deploy/n8n -c n8n -- sh -c \
-    "wget -qO- 'http://searxng.searxng.svc.cluster.local:8080/search?q=kubernetes&engines=$e&format=json'" \
-    | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d['results']),d.get('unresponsive_engines'))"
+    "wget -qO- 'http://searxng.searxng.svc.cluster.local:8080/search?q=kubernetes&engines=${e// /+}&format=json'" \
+    | python3 -c "import json,sys,collections;d=json.load(sys.stdin);print(dict(collections.Counter(x for r in d['results'] for x in r.get('engines',[]))),d.get('unresponsive_engines'))"
 done
 ```
+
+Read the **attribution dict**, not the total: probing a name the build doesn't have (or an
+`inactive` one) silently falls back to the default engines and returns ~30 results that
+look like success. Engine names change between builds (e.g. `google` → `google cse`
+enabled by default; `startpage`, `presearch`, `dogpile` absent in 2026.9.13).
 
 **Run the canary by hand:** `kubectl -n searxng create job --from=cronjob/searxng-canary canary-manual && kubectl -n searxng logs -f job/canary-manual`
 
