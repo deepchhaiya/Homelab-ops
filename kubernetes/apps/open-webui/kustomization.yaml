@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: open-webui
 resources:
   - resources.yaml
+  - secret.enc.yaml
   - hindsight-secret.enc.yaml
   - deployment.yaml
   - service.yaml
