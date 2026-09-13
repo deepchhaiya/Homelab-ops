@@ -23,7 +23,9 @@ spec:
         tier: ai-worker
       containers:
         - name: open-webui
-          image: ghcr.io/open-webui/open-webui:latest
+          # Pinned deliberately: :latest + imagePullPolicy IfNotPresent left this stuck
+          # on 0.9.5 for 89 days. Bump this tag to upgrade.
+          image: ghcr.io/open-webui/open-webui:v0.11.3
           imagePullPolicy: IfNotPresent
           ports:
             - { containerPort: 8080, name: http }
@@ -46,6 +48,17 @@ spec:
                 secretKeyRef:
                   name: open-webui-credentials
                   key: WEBUI_SECRET_KEY
+            # Hindsight memory layer — consumed by the Open WebUI filter/tool
+            # functions (Workspace -> Functions). In-cluster service, no NodePort.
+            - name: HINDSIGHT_URL
+              value: "http://hindsight.hindsight.svc.cluster.local:8888"
+            - name: HINDSIGHT_BANK
+              value: "deep"
+            - name: HINDSIGHT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: open-webui-hindsight
+                  key: HINDSIGHT_API_KEY
             # Telemetry off
             - name: ANONYMIZED_TELEMETRY
               value: "false"
