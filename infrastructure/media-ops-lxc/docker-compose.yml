@@ -120,11 +120,18 @@ services:
   # PRIVATE CLOUD (Nextcloud)
   # ============================================================
   nextcloud:
-    image: nextcloud:stable
+    # PINNED to a major, not :stable. Nextcloud cannot skip majors: :stable moved
+    # 32 -> 34 while this container sat on 32, so a bare pull would have failed
+    # the upgrade. Stepped 32.0.7 -> 32.0.15 -> 33.0.9 -> 34.0.4 on 2026-09-14.
+    # Next major: bump to 35-apache (one major at a time) after checking app
+    # compatibility at apps.nextcloud.com/api/v1/platform/<ver>/apps.json.
+    # WUD still picks up 34.x patch builds via the digest; the include regex makes
+    # it surface the next major tag instead of every point-release tag.
+    image: nextcloud:34-apache
     container_name: nextcloud
-    # Docker Hub :stable — WUD needs this to watch the digest (see WUD note).
     labels:
       - wud.watch.digest=true
+      - wud.tag.include=^\d+-apache$
     devices:
       - /dev/dri:/dev/dri
     volumes:
@@ -182,7 +189,9 @@ services:
     restart: unless-stopped
 
   nextcloud-redis:
-    image: redis:7-alpine
+    # 7 -> 8 on 2026-09-14. Cache + file locking only (no volume, nothing to
+    # migrate). immich-redis is deliberately still on 7-alpine.
+    image: redis:8-alpine
     container_name: nextcloud-redis
     # Same WUD false positive as immich-redis (junk "32bit-stretch" tag).
     labels:
