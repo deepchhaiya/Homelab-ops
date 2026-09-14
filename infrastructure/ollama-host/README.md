@@ -61,8 +61,9 @@ This adds **one** targeted rule: `tcp dport 11434` accepted only from `192.168.4
 | `qwen3.6:35b-a3b` | 23 GB | ~26 GB | Primary — chat, tool calling, code (3.8 B active params) |
 | `qwen3-embedding:0.6b` | 639 MB | ~1.5 GB | Embeddings (was mem0's embedder; Hindsight uses its own in-pod bge-small) |
 
-**Context window:** the override sets `OLLAMA_CONTEXT_LENGTH=32768` (default is ~4K,
-which truncates large prompts). This is required for agentic coding tools — see
+**Context window:** the override sets `OLLAMA_CONTEXT_LENGTH=65536` (default is ~4K,
+which truncates large prompts). Hermes Agent needs ≥64K — at 32K its responses were
+cut off with `finish_reason='length'` (raised 2026-09-13). This is required for agentic coding tools — see
 [`docs/vscode-ai-agent-setup.md`](../../docs/vscode-ai-agent-setup.md) for using
 `qwen3.6:35b-a3b` as a **Claude-Code-style agent inside VS Code** (via the Cline
 extension → `http://192.168.4.84:11434`). Verified: OpenAI-compatible chat + tool
