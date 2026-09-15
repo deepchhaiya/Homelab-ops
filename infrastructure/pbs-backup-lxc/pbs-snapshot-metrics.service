@@ -1,0 +1,7 @@
+# /etc/systemd/system/pbs-snapshot-metrics.service  (Evo-X2 host)
+[Unit]
+Description=Emit PBS snapshot freshness metrics for node-exporter
+RequiresMountsFor=/mnt/backup-hdd
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pbs-snapshot-metrics.sh

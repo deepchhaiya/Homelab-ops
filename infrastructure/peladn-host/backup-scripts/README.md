@@ -15,8 +15,9 @@ live at `/opt/backup-scripts/` and, for `talos-backup.sh`, also `/home/n8n-backu
 |---|---|---|---|---|
 | `rpi4-pvc-backup.sh` | `n8n-backup` | rpi4 PVC Dumps (`l8DHMWUaHEoAaQkg`) | Sat 1 AM | Logical dumps of DBs on the **rpi4 Talos node's local-path** (never captured by vzdump): miniflux pg + **n8n pg** + karakeep pg, **plus n8n filesystem extras** (community-node manifest + `/home/data` user CSVs — not in the pg dump) → `/mnt/pvedas/k8s-backups` |
 | `talos-backup.sh` | `n8n-backup` | Talos Config and Data Backup (`ggPHd7ROI3GVsLOL`) | every 12 h | Talos **etcd snapshot** only → mirrored to **Evo-X2** `/mnt/backup-hdd/talos-etcd-snapshots/`. Talos YAML configs live in git (`kubernetes/talos/`). |
-| `k8s-export.sh` | root | Talos Config and Data Backup (`ggPHd7ROI3GVsLOL`) | Sun 1 AM | k8s manifest/data export |
-| `pbs-config-backup.sh` | root | *(to wire — Sat 3 AM in the PBS workflow)* | weekly | CT 200 (PBS LXC) **config only**: `pct config 200` + `/etc/proxmox-backup/` (datastore.cfg/repos, acl, remote, prune, domains, keys) + host `storage.cfg`. **NOT** the datastore chunk data. → `/mnt/pvedas/pbs-config-backups` |
+| `k8s-export.sh` | `n8n-backup` | Talos Config and Data Backup (`ggPHd7ROI3GVsLOL`) | every 12 h | miniflux `pg_dump` → `/mnt/pvedas/k8s-app-exports/<YYYYMMDD>/` (14-day prune) |
+| `pbs-config-backup.sh` | root | **RETIRED** — n8n node disabled | — | Was: CT 200 (PBS LXC) config only. CT 200 moved to **Evo-X2** on 2026-05-23; the Peladn CT 200 is a stopped leftover, so this script no longer captures the live PBS. Last output 2026-06-21. Dropped from backup metrics 2026-09-14. |
+| `backup-metrics-textfile.sh` | root | systemd timer (15 min) | — | Backup freshness metrics for the Grafana **Homelab Backups** dashboard. PBS snapshot freshness is emitted on Evo-X2 by `infrastructure/pbs-backup-lxc/pbs-snapshot-metrics.sh`. |
 
 Everything **except `talos-backup.sh`** lands under `/mnt/pvedas` (the DAS), which
 is swept into the **Friday DAS PBS backup** (`DAS Backup to External HDD via PBS`,

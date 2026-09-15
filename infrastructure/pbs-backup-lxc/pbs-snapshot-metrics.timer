@@ -1,0 +1,9 @@
+# /etc/systemd/system/pbs-snapshot-metrics.timer  (Evo-X2 host)
+[Unit]
+Description=Refresh PBS snapshot metrics every 15 min
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=1min
+[Install]
+WantedBy=timers.target

@@ -4,7 +4,7 @@
   "tags": ["backups", "homelab"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "refresh": "5m",
   "time": { "from": "now-30d", "to": "now" },
@@ -13,45 +13,11 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Oldest backup",
+      "title": "Overdue jobs",
+      "description": "Backups older than their allowed window (homelab_backup_max_age_seconds: weekly jobs 8d, 12h jobs 26h).",
       "id": 1,
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green", "value": null },
-            { "color": "yellow", "value": 691200 },
-            { "color": "red", "value": 1209600 }
-          ] }
-        },
-        "overrides": []
-      },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value",
-        "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "max(homelab_backup_age_seconds)", "instant": true, "legendFormat": "oldest" } ]
-    },
-    {
-      "type": "stat",
-      "title": "Backups tracked",
-      "id": 2,
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
-      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value",
-        "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "count(homelab_backup_age_seconds)", "instant": true } ]
-    },
-    {
-      "type": "stat",
-      "title": "Stale (> 14d)",
-      "id": 3,
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -66,11 +32,49 @@
       "options": { "colorMode": "background", "graphMode": "none", "textMode": "value",
         "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "sum(homelab_backup_age_seconds > bool 1209600) or on() vector(0)", "instant": true } ]
+        "expr": "sum(homelab_backup_age_seconds > bool homelab_backup_max_age_seconds) or on() vector(0)", "instant": true } ]
     },
     {
       "type": "stat",
-      "title": "Total size (newest of each)",
+      "title": "Closest to overdue",
+      "description": "Highest age / allowed-window ratio across all jobs. 100% = overdue.",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.9 },
+            { "color": "red", "value": 1 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "topk(1, homelab_backup_age_seconds / homelab_backup_max_age_seconds)", "instant": true, "legendFormat": "{{name}}" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Backups tracked",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "colorMode": "none", "graphMode": "none", "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+        "expr": "count(homelab_backup_age_seconds)", "instant": true } ]
+    },
+    {
+      "type": "stat",
+      "title": "Dump size (newest of each)",
+      "description": "File-based dumps only (db-dump + etcd). PBS snapshots are deduplicated chunks and have no per-snapshot size here.",
       "id": 4,
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
@@ -78,11 +82,11 @@
       "options": { "colorMode": "none", "graphMode": "none", "textMode": "value",
         "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "sum(homelab_backup_size_bytes)", "instant": true } ]
+        "expr": "sum(homelab_backup_size_bytes{host=\"peladn\"})", "instant": true } ]
     },
     {
       "type": "row",
-      "title": "Freshness & size",
+      "title": "Freshness",
       "id": 10,
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
@@ -90,18 +94,21 @@
     },
     {
       "type": "bargauge",
-      "title": "Backup age by job  (yellow > 8d, red > 14d)",
+      "title": "Age as % of allowed window  (yellow > 90%, red = overdue)",
       "id": 11,
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "h": 10, "w": 10, "x": 0, "y": 5 },
+      "gridPos": { "h": 14, "w": 9, "x": 0, "y": 5 },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "percentunit",
+          "decimals": 0,
+          "min": 0,
+          "max": 1,
           "color": { "mode": "thresholds" },
           "thresholds": { "mode": "absolute", "steps": [
             { "color": "green", "value": null },
-            { "color": "yellow", "value": 691200 },
-            { "color": "red", "value": 1209600 }
+            { "color": "yellow", "value": 0.9 },
+            { "color": "red", "value": 1 }
           ] }
         },
         "overrides": []
@@ -109,44 +116,54 @@
       "options": { "displayMode": "gradient", "orientation": "horizontal", "showUnfilled": true,
         "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "homelab_backup_age_seconds", "instant": true, "legendFormat": "{{name}}" } ]
+        "expr": "sort_desc(homelab_backup_age_seconds / homelab_backup_max_age_seconds)", "instant": true, "legendFormat": "{{name}}" } ]
     },
     {
       "type": "table",
-      "title": "Backups — age / size / files",
+      "title": "Backups — age / window / size / copies",
+      "description": "copies = files kept (dumps/etcd) or PBS snapshots in the group. kind: pbs = vzdump/pxar snapshot on Evo-X2 PBS; db-dump / etcd = files written by the Peladn backup scripts.",
       "id": 12,
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "h": 10, "w": 14, "x": 10, "y": 5 },
+      "gridPos": { "h": 14, "w": 15, "x": 9, "y": 5 },
       "fieldConfig": {
         "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "age" }, "properties": [
-            { "id": "unit", "value": "s" },
+          { "matcher": { "id": "byName", "options": "age" }, "properties": [ { "id": "unit", "value": "s" } ] },
+          { "matcher": { "id": "byName", "options": "window" }, "properties": [ { "id": "unit", "value": "s" } ] },
+          { "matcher": { "id": "byName", "options": "% of window" }, "properties": [
+            { "id": "unit", "value": "percentunit" },
+            { "id": "decimals", "value": 0 },
             { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 691200 },
-              { "color": "red", "value": 1209600 } ] } }
+              { "color": "yellow", "value": 0.9 },
+              { "color": "red", "value": 1 } ] } }
           ] },
           { "matcher": { "id": "byName", "options": "size" }, "properties": [ { "id": "unit", "value": "bytes" } ] },
-          { "matcher": { "id": "byName", "options": "files" }, "properties": [ { "id": "unit", "value": "short" } ] }
+          { "matcher": { "id": "byName", "options": "copies" }, "properties": [ { "id": "unit", "value": "short" } ] }
         ]
       },
-      "options": { "showHeader": true, "sortBy": [ { "displayName": "age", "desc": true } ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "% of window", "desc": true } ] },
       "transformations": [
         { "id": "merge", "options": {} },
         { "id": "organize", "options": {
-          "excludeByName": { "Time": true, "__name__": true, "host": true, "instance": true, "job": true },
-          "renameByName": { "name": "backup", "Value #A": "age", "Value #B": "size", "Value #C": "files" },
-          "indexByName": { "name": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3 }
+          "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
+          "renameByName": { "name": "backup", "host": "on", "Value #A": "age", "Value #B": "window",
+            "Value #C": "% of window", "Value #D": "size", "Value #E": "copies" },
+          "indexByName": { "name": 0, "kind": 1, "host": 2, "Value #A": 3, "Value #B": 4,
+            "Value #C": 5, "Value #D": 6, "Value #E": 7 }
         } }
       ],
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "expr": "homelab_backup_age_seconds", "instant": true, "format": "table" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "expr": "homelab_backup_size_bytes", "instant": true, "format": "table" },
+          "expr": "homelab_backup_max_age_seconds", "instant": true, "format": "table" },
         { "refId": "C", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "homelab_backup_age_seconds / homelab_backup_max_age_seconds", "instant": true, "format": "table" },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "expr": "homelab_backup_size_bytes", "instant": true, "format": "table" },
+        { "refId": "E", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "expr": "homelab_backup_count", "instant": true, "format": "table" }
       ]
     },
@@ -155,26 +172,33 @@
       "title": "Trend",
       "id": 20,
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
       "panels": []
     },
     {
       "type": "timeseries",
-      "title": "Backup age over time",
+      "title": "Age as % of allowed window over time  (sawtooth = job running on schedule)",
       "id": 21,
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 20 },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "spanNulls": true }
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "spanNulls": true,
+            "thresholdsStyle": { "mode": "line" } },
+          "color": { "mode": "palette-classic" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "transparent", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
         },
         "overrides": []
       },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-        "expr": "homelab_backup_age_seconds", "legendFormat": "{{name}}" } ]
+        "expr": "homelab_backup_age_seconds / homelab_backup_max_age_seconds", "legendFormat": "{{name}}" } ]
     }
   ]
 }
