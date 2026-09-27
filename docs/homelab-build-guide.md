@@ -16,7 +16,7 @@ You almost certainly do not have my machines. What matters is the *roles*, not t
 
 | Role in this build | Mine | Minimum sensible substitute |
 | ------------------ | ---- | --------------------------- |
-| **Primary always-on host** — hypervisor, control plane, hardware-bound services | Peladn mini PC, Ryzen 7 8845HS, 32 GB | any mini PC with 16 GB+ and an iGPU |
+| **Primary always-on host** — hypervisor, control plane, hardware-bound services | Peladn mini PC, Ryzen 7 7840HS, 32 GB | any mini PC with 16 GB+ and an iGPU |
 | **Second always-on host** — observability, backups, AI | GMKtek Evo-X2, 96 GB unified | a second mini PC; large unified memory only matters if you run local LLMs |
 | **Low-power always-on worker** | Raspberry Pi 4, 4 GB, ARM64 | any SBC, or skip and use the primary host |
 | **Burst workers** | Intel NUC, Dell R610, i9 + RTX 5070 | anything you already own that supports WOL — optional |
@@ -330,7 +330,7 @@ In the order the pain arrived:
 | --------- | ------------ | ------- |
 | Primary host | ~15–25 W | control plane, household services, media, bulk storage |
 | Second host | ~20–30 W | AI inference, observability, backups |
-| SBC worker | ~5 W | always-on Kubernetes worker |
+| SBC worker | ~6.5 W | always-on Kubernetes worker |
 | **Total** | **~40–60 W** | everything that must never be down |
 
 The burst tier adds nothing at idle. That is the entire argument for it — the Dell R610 alone would roughly triple the standing draw if it stayed awake.

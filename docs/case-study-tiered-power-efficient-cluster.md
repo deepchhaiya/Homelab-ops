@@ -10,9 +10,9 @@
 
 | Tier | Machine | Power | Role |
 | ---- | ------- | ----- | ---- |
-| 1 | Peladn — Ryzen 7 8845HS, 32 GB, Radeon 780M | 24×7, ~15–25 W | Talos control plane VM + two Docker LXCs (household services, media) + the 11 TB DAS |
+| 1 | Peladn — Ryzen 7 7840HS, 32 GB, Radeon 780M | 24×7, ~15–25 W | Talos control plane VM + two Docker LXCs (household services, media) + the 11 TB DAS |
 | 1 | Evo-X2 — Ryzen AI Max+ 395, 96 GB UMA, Radeon 8060S | 24×7, ~20–30 W | Ollama on the host, PBS, observability LXC, K8s worker `tier=ai-worker` |
-| 1 | Raspberry Pi 4 — 4 GB, ARM64 | 24×7, ~5 W | K8s worker `tier=always-on`, bare-metal Talos from USB SSD |
+| 1 | Raspberry Pi 4 — 4 GB, ARM64 | 24×7, ~6.5 W | K8s worker `tier=always-on`, bare-metal Talos from USB SSD |
 | 2 | Intel NUC i3-4010U · Dell R610 · i9-14900K + RTX 5070 | WOL, 0 W asleep | K8s workers `tier=on-demand`, batch and burst only |
 
 Single cluster (`Ira-cluster`), mixed architecture (amd64 + arm64), one control plane, GitOps via Flux CD.
@@ -124,7 +124,7 @@ n8n itself runs on the always-on tier — the orchestrator cannot live on a node
 
 - **A second always-on host changes more decisions than a faster one.** Observability placement, backup placement and the failover model all improved simply because there was somewhere else to put things.
 - **Unified memory beat a discrete GPU for inference.** 96 GB of shared memory on an iGPU runs a 35B model that a 12 GB discrete card cannot load at all. Worth benchmarking before buying VRAM.
-- **Idle watts, not peak performance, decide what stays on.** An i3-4010U lost its always-on role to a Raspberry Pi doing the same work at ~5 W — several times less standing draw for the same result.
+- **Idle watts, not peak performance, decide what stays on.** An i3-4010U lost its always-on role to a Raspberry Pi doing the same work at ~6.5 W — several times less standing draw for the same result.
 - **Labels are an abstraction worth paying for on day one.** Every hardware reshuffle since has been a label change, not a refactor.
 - **A tier with one member is a single point of failure with a nicer name.** `tier=always-on` currently resolves to one node, so pods pinned to it have nowhere to go if the Pi is down — a conscious trade against running replicated storage, and one worth knowing explicitly.
 - **Plan for the shape, not the assignment.** The always-on-core-plus-burst shape survived every revision; almost every specific machine assignment inside it changed at least once.

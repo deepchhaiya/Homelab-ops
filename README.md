@@ -12,7 +12,7 @@ Production-grade homelab platform built on **Talos Linux**, **Flux CD GitOps**, 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  Tier 1 — Always-On (24/7)                                              │
 │                                                                         │
-│  Peladn  · Ryzen 7 8845HS · 32 GB · Radeon 780M iGPU                    │
+│  Peladn  · Ryzen 7 7840HS · 32 GB · Radeon 780M iGPU                    │
 │  ├── Talos K8s Control Plane VM (ira-peladn-talos-cp)                   │
 │  ├── home-ops-lxc      · HA · NPM · Vaultwarden · ESPHome               │
 │  └── media-ai-ops-lxc  · Nextcloud · Immich · Ollama (ROCm, qwen3:4b)   │
