@@ -190,6 +190,25 @@ kubectl get nodes --show-labels
 
 **Pitfall:** do not apply labels with `kubectl label node`. Put them in the machine config so they survive a rebuild — the labels are your scheduling contract, and re-adding them by hand at the wrong moment is how workloads silently end up in the wrong tier. On ARM boards, flash the **arm64** image and prefer a USB SSD over a microSD card.
 
+**Pitfall — the static IP that silently doesn't apply.** Name the interface correctly or
+your static address is ignored with no error at all. A Talos VM on Proxmox with a virtio
+NIC comes up as **`ens18`**, not `eth0`; Talos skips an address block for an interface
+that doesn't exist and falls back to DHCP, so the node joins on a lease and the config
+*looks* right. Check the real name before applying:
+
+```bash
+talosctl get links --nodes <ip>      # in maintenance mode: add --insecure
+```
+
+Two of the workers in this repo carried that bug for months — the committed config said
+one address while the node ran on another, which also makes the repo a misleading record
+of the running cluster. When you clone an existing worker config for a new node, re-check
+the interface name on the new hardware.
+
+**Pitfall — never `talosctl gen config` for an additional worker.** It generates a *new*
+cluster CA and join token, and the node will never join. Copy an existing worker config
+and change only the hostname, address, and labels.
+
 ---
 
 ## Stage 7 — Flux CD and in-cluster decryption
