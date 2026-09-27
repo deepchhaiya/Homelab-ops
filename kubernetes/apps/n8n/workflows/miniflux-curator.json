@@ -1,12 +1,8 @@
 {
+  "id": "dU9PiPGALT4sYwi5",
   "name": "miniflux-curator",
-  "settings": {
-    "executionOrder": "v1",
-    "timezone": "America/Chicago",
-    "saveDataSuccessExecution": "all"
-  },
-  "meta": {},
-  "pinData": {},
+  "active": true,
+  "versionId": "388785d9-1e77-4c67-8c50-9a4121a582d8",
   "nodes": [
     {
       "parameters": {
@@ -14,97 +10,108 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 7-21/3 * * *"
+              "expression": "0 6-21/3 * * *"
             }
           ]
         }
       },
-      "id": "c0000000-0000-0000-0000-000000000001",
+      "id": "bff2834b-e546-43b9-ab7d-9370c34e8ef8",
       "name": "Every 3h (07-21)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -1240,
-        0
+        -1520,
+        192
       ]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "http://miniflux.miniflux.svc.cluster.local:8080/v1/entries?status=unread&direction=asc&limit=60",
+        "url": "=https://miniflux.dkghar.duckdns.org/v1/entries?status=unread&direction=desc&limit={{ $json.limit }}&category_id={{ $json.category_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 20000
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Auth-Token",
-              "value": "={{ $env.MINIFLUX_TOKEN }}"
-            }
-          ]
         }
       },
-      "id": "c0000000-0000-0000-0000-000000000002",
+      "id": "a6754df1-17b7-4ed2-b941-ae9a305d7c47",
       "name": "Miniflux: get unread",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1020,
-        0
-      ]
+        -1312,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        },
+        "httpBasicAuth": {
+          "id": "irAUSAuqN5lX4zJX",
+          "name": "Miniflux credentials"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "// runOnceForAllItems. No $env here (Code nodes run in the task runner and don't\n// see the deployment env). Paste your real profile into PROFILE below.\nconst res = $input.first().json;\nconst entries = Array.isArray(res.entries) ? res.entries : [];\n\nconst PROFILE = \"You are a feed-triage assistant. Score each article 0-10 on how much it advances the reader's goals, then put it in one bucket.\\n\\nREADER  (replace this block with your real profile in this node; keep it out of the public repo)\\nInterested in applied AI / LLM engineering, cloud and object storage, Kubernetes and inference infrastructure, and self-hosting. Favour hands-on engineering depth and things worth writing about; discount news, funding and product announcements.\\n\\nSCORE 0-10 ON GOAL LEVERAGE, NOT GENERAL INTEREST\\n9-10  reproduce-and-write-up depth, primary-source case studies, strong signal for the target field.\\n7-8   strongly relevant engineering patterns, techniques on the learning path, or a clear angle worth writing about.\\n5-6   tangentially useful: general platform/SRE/cost content, a technique that could become a writeup.\\n2-4   generic tech news, announcements with no engineering substance.\\n0-1   noise: unrelated, clickbait, marketing.\\n\\nBUCKETS (pick one): career | applied-ai | infra | storage | homelab | noise\\n\\nOUTPUT  Return ONLY a JSON object, no prose, no code fence:\\n{\\\"score\\\": <int 0-10>, \\\"bucket\\\": \\\"<one bucket>\\\", \\\"why\\\": \\\"<=25 words>\\\", \\\"publish_angle\\\": \\\"<a post title the reader could write, or empty string>\\\"}\";\n\nreturn entries.map((e) => {\n  const html = e.content || e.summary || '';\n  const text = String(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\s+/g, ' ').trim().slice(0, 1400);\n  const feed = (e.feed && e.feed.title) || '';\n  const category = (e.feed && e.feed.category && e.feed.category.title) || '';\n  const userMsg = 'TITLE: ' + e.title + '\\nFEED: ' + feed + '\\nCATEGORY: ' + category + '\\nURL: ' + e.url + '\\n\\nEXCERPT:\\n' + (text || '(no excerpt)');\n  return { json: { id: e.id, title: e.title, url: e.url, feed, category, sysPrompt: PROFILE, userMsg } };\n});\n"
+        "jsCode": "// runOnceForAllItems: flatten every per-category fetch into one item per entry,\n// each carrying the full message list for the scorer.\n//\n// Input is one item per scanned category: { total, entries: [...] }. /v1/entries\n// returns an object, so the HTTP node does NOT split it into separate items.\n//\n// 2026-09-27: rubric rewritten for a MORNING NEWS brief. The old prompt asked\n// \"would a senior infrastructure engineer want this\", so the model dutifully\n// filled the brief with Kubernetes point releases and llama.cpp tags and left out\n// the day's actual tech and AI news. News value now leads; Deep's specialities are\n// a bonus on top, not the test.\nconst seen = new Set();\nconst entries = [];\n$input.all().forEach((item) => {\n  const arr = (item.json && Array.isArray(item.json.entries)) ? item.json.entries : [];\n  arr.forEach((e) => {\n    if (e && e.id && !seen.has(e.id)) { seen.add(e.id); entries.push(e); }\n  });\n});\n\n// Newest first: this is a morning news brief, recency is part of the value.\nentries.sort((a, b) => new Date(b.published_at || 0) - new Date(a.published_at || 0));\nconst MAX_PER_RUN = 100;\nconst batch = entries.slice(0, MAX_PER_RUN);\nconsole.log('fetched ' + entries.length + ' unread across categories, scoring ' + batch.length);\n\n// Commerce stays code-classified (2026-09-16); kept as defence in depth even\n// though deal categories are no longer scanned by this workflow.\nconst COMMERCE_SOURCE = /deal|slickdeal|coupon|bargain|woot|frugal|shopping|clearance/i;\nconst PRICE = /\\$\\s?\\d|\\b\\d+\\s?%\\s*off\\b/i;\nconst RETAIL_CUE = /free ship|free s&h|\\bfs\\b|coupon|promo code|w\\/ ?(?:s&s|code|prime)|subscribe & save|prime member|at amazon|clearance|\\bsale\\b|\\bdeal\\b/i;\nfunction isCommerce(category, feed, title) {\n  if (COMMERCE_SOURCE.test(category) || COMMERCE_SOURCE.test(feed)) return true;\n  return PRICE.test(title) && RETAIL_CUE.test(title);\n}\n\nconst SYS = [\n  \"You triage articles for Deep's MORNING TECH NEWS BRIEF. He reads it at 07:00 as his main tech news source. He wants to know what actually happened in tech, what moved in AI and in the tech industry, and only then anything deep in his own speciality.\",\n  '',\n  'Reply with ONE JSON object and nothing else:',\n  '{\"score\": <integer 0-10>, \"bucket\": \"<one word>\", \"why\": \"<max 20 words>\", \"publish_angle\": \"<post title or empty string>\"}',\n  '',\n  'score = how much this belongs in a morning tech news brief:',\n  \"9-10 today's big story: major launch, major outage or breach, big funding / M&A / earnings surprise, a model release the industry will discuss\",\n  '7-8  clearly newsworthy: notable release, real incident, significant industry or market move, strong Hacker News discussion, sharp analysis',\n  '5-6  worth knowing: minor release, decent analysis, niche but real technical writeup',\n  '2-4  routine: incremental announcement, vendor marketing, listicle, low-stakes update',\n  '0-1  not news: shopping, entertainment, lifestyle, clickbait',\n  '',\n  'WEIGHTING',\n  '- General tech news and AI news outrank niche infrastructure detail. A Kubernetes point release or a llama.cpp build tag is a 5, not an 8.',\n  '- Money and industry moves are news: funding rounds, acquisitions, earnings, layoffs, antitrust, big partnerships.',\n  \"- Deep's specialities (object storage and S3, Kubernetes, LLM inference infra, homelab) are a BONUS on top of news value, never a substitute for it.\",\n  '',\n  'bucket must be exactly one of these lowercase words:',\n  'news business ai security infra storage homelab career noise',\n  '  news      general tech news, launches, outages, policy, regulation',\n  '  business  funding, M&A, earnings, markets, layoffs, company strategy',\n  '  ai        models, labs, AI research and releases, AI tooling',\n  '  security  CVEs, breaches, exploits, incident writeups',\n  '  infra     kubernetes, cloud, databases, distributed systems, SRE',\n  '  storage   object storage and S3, data platforms, backup',\n  '  homelab   self-hosting, homelab hardware, Proxmox and Talos',\n  '  career    hiring, comp, role and industry shifts for engineers',\n  '  noise     not news at all',\n  '',\n  'HARD RULES',\n  '- Shopping deals, coupons, discounts, product prices, retail listings: score 0, bucket noise, publish_angle \"\".',\n  '- Entertainment, sport, celebrity or non-tech politics: score 0-2.',\n  '- \"why\" describes THE ARTICLE IN FRONT OF YOU. Never copy these instructions, the bucket list or the score bands into \"why\".',\n  '- If you cannot tell what the article is about, use its title as \"why\" and score 2.',\n].join('\\n');\n\n// Worked examples as real turns. These four encode the correction: retail is 0,\n// money news is high, niche infra is mid, a model launch is top.\nconst SHOTS = [\n  [\n    'TITLE: Nike Men\\'s Club Fleece Hoodie (2 Colors) $24.99 + Free Shipping $75+\\nFEED: Slickdeals Popular Deals RSS Feed\\nMINIFLUX_CATEGORY: Deals\\n\\nEXCERPT:\\nNike Club Fleece Hoodie available in two colors for $24.99 with free shipping over $75.',\n    '{\"score\": 0, \"bucket\": \"noise\", \"why\": \"Retail clothing sale, no news value.\", \"publish_angle\": \"\"}',\n  ],\n  [\n    'TITLE: Nvidia beats on earnings but warns data-centre growth will slow\\nFEED: Bloomberg Technology\\nMINIFLUX_CATEGORY: Tech-Business\\n\\nEXCERPT:\\nNvidia reported quarterly revenue above estimates while guiding to slower data-centre growth next year, sending shares down 4% after hours.',\n    '{\"score\": 9, \"bucket\": \"business\", \"why\": \"Nvidia beat estimates but guided to slower data-centre growth; shares fell 4% after hours.\", \"publish_angle\": \"What Nvidia guidance says about the AI capex cycle\"}',\n  ],\n  [\n    'TITLE: Kubernetes v1.34.3 patch release\\nFEED: Kubernetes Blog\\nMINIFLUX_CATEGORY: Cloud-DevOps\\n\\nEXCERPT:\\nThis patch release contains bug fixes for kubelet and the scheduler, plus dependency bumps.',\n    '{\"score\": 5, \"bucket\": \"infra\", \"why\": \"Routine Kubernetes patch release with kubelet and scheduler bug fixes.\", \"publish_angle\": \"\"}',\n  ],\n  [\n    'TITLE: OpenAI launches GPT-6 with native computer use\\nFEED: OpenAI News\\nMINIFLUX_CATEGORY: AI-News\\n\\nEXCERPT:\\nOpenAI announced GPT-6, adding native computer control and a 1M token context window, available to API customers today.',\n    '{\"score\": 10, \"bucket\": \"ai\", \"why\": \"OpenAI ships GPT-6 with native computer use and 1M token context, API available today.\", \"publish_angle\": \"What native computer use changes for agent design\"}',\n  ],\n];\n\nconst shotMessages = SHOTS.flatMap(([u, a]) => [\n  { role: 'user', content: u },\n  { role: 'assistant', content: a },\n]);\n\nreturn batch.map((e) => {\n  const html = e.content || e.summary || '';\n  const text = String(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\s+/g, ' ').trim().slice(0, 1400);\n  const feed = (e.feed && e.feed.title) || '';\n  const category = (e.feed && e.feed.category && e.feed.category.title) || '';\n  const title = e.title || '';\n  const commerce = isCommerce(category, feed, title);\n  const userMsg = `TITLE: ${title}\\nFEED: ${feed}\\nMINIFLUX_CATEGORY: ${category}\\nAUTHOR: ${e.author || ''}\\nURL: ${e.url}\\nPUBLISHED: ${e.published_at || ''}\\n\\nEXCERPT:\\n${text || '(no excerpt)'}`;\n  return {\n    json: {\n      id: e.id,\n      title,\n      url: e.url,\n      feed,\n      category,\n      published_at: e.published_at || '',\n      isCommerce: commerce,\n      sysPrompt: SYS,\n      userMsg,\n      messages: [{ role: 'system', content: SYS }, ...shotMessages, { role: 'user', content: userMsg }],\n    },\n  };\n});"
       },
-      "id": "c0000000-0000-0000-0000-000000000003",
+      "id": "ecb65aa1-d4e1-4da8-a6cd-4722f80a4c2d",
       "name": "Prep entries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -800,
-        0
+        -1120,
+        192
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://192.168.4.12:11434/api/chat",
+        "url": "=http://192.168.4.84:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3.5:9b\",\n  \"stream\": false,\n  \"format\": \"json\",\n  \"think\": false,\n  \"keep_alive\": 1800,\n  \"options\": { \"temperature\": 0.1, \"num_ctx\": 8192 },\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
         "options": {
-          "timeout": 120000,
           "batching": {
             "batch": {
               "batchSize": 4,
               "batchInterval": 1500
             }
-          }
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"qwen3:4b-instruct\", stream: false, format: \"json\", keep_alive: 1800, options: { temperature: 0.1, num_ctx: 8192 }, messages: [ { role: \"system\", content: String($json.sysPrompt || \"\") }, { role: \"user\", content: String($json.userMsg || \"\") } ] }) }}"
+          },
+          "timeout": 120000
+        }
       },
-      "id": "c0000000-0000-0000-0000-000000000004",
+      "id": "11a28bb3-6ddf-40bf-b001-56380c049600",
       "name": "Ollama: score",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -580,
-        0
-      ]
+        -864,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "// runOnceForEachItem. Pull the model verdict from this item, originals from Prep by index.\nconst orig = $('Prep entries').all()[$itemIndex].json;\nlet v = {};\ntry { v = JSON.parse(($json.message && $json.message.content) || '{}'); } catch (e) { v = {}; }\n\nlet score = Math.round(Number(v.score));\nif (!Number.isFinite(score)) score = 0;\nscore = Math.max(0, Math.min(10, score));\nconst bucket = String(v.bucket || 'noise');\nconst why = String(v.why || '').slice(0, 240);\nconst angle = String(v.publish_angle || '').slice(0, 240);\n\nlet action = score >= 8 ? 'notify' : (score >= 6 ? 'star' : 'skip');\n\nconst now = $now.setZone('America/Chicago');\nconst hm = now.hour + now.minute / 60;\nconst quiet = (hm >= 22 || hm < 7.5);\nconst sd = $getWorkflowStaticData('global');\nconst today = now.toFormat('yyyy-LL-dd');\nif (sd.capDate !== today) { sd.capDate = today; sd.capCount = 0; }\nif (action === 'notify') {\n  if (quiet || (sd.capCount || 0) >= 6) action = 'star';\n  else sd.capCount = (sd.capCount || 0) + 1;\n}\n\nconst emoji = ({ career: '🎯', storage: '🗄️', infra: '⚙️', 'applied-ai': '🤖', homelab: '🏠', noise: '·' })[bucket] || '•';\nconst gotifyPriority = score >= 9 ? 8 : 6;\nconst gotifyTitle = (emoji + ' [' + score + '] ' + (orig.feed || '')).slice(0, 120);\nlet gotifyMessage = '**' + orig.title + '**\\n\\n' + why;\nif (angle) gotifyMessage += '\\n\\n✍️ Post angle: ' + angle;\ngotifyMessage += '\\n\\n' + orig.url;\nconst karakeepNote = 'score ' + score + ' · ' + bucket + (why ? ' · ' + why : '') + (angle ? ' · angle: ' + angle : '');\n\nreturn { json: { id: orig.id, url: orig.url, title: orig.title, feed: orig.feed, category: orig.category, score, bucket, why, publish_angle: angle, action, gotifyPriority, gotifyTitle, gotifyMessage, karakeepNote } };\n",
-        "mode": "runOnceForEachItem"
+        "mode": "runOnceForEachItem",
+        "jsCode": "// runOnceForEachItem\n// $json = raw Ollama /api/chat response for ONE entry.\n// Original entry fields come from Prep entries via pairedItem, so a batched /\n// retried / dropped Ollama call can never pair a verdict with the wrong article.\nconst src = $('Prep entries').item.json;   // { id, title, url, feed, category, isCommerce, ... }\nconst res = $json;                          // { model, message: { content }, ... }\n\nlet v = {};\ntry { v = JSON.parse((res.message && res.message.content) || '{}'); }\ncatch (e) { v = { score: 0, bucket: 'noise', why: 'model returned non-JSON', publish_angle: '' }; }\n\nconst entryId = Number(src.id);\nconst hasId = Number.isFinite(entryId);\n\nlet score = Math.round(Number(v.score));\nif (!Number.isFinite(score)) score = 0;\nscore = Math.max(0, Math.min(10, score));\n\n// Buckets are a fixed list; anything else is noise rather than a new bucket.\n// 'business' added 2026-09-27 for funding / M&A / earnings / market moves.\nconst BUCKETS = ['news', 'business', 'ai', 'security', 'infra', 'storage', 'homelab', 'career', 'noise'];\nlet bucket = String(v.bucket || '').trim().toLowerCase();\nif (!BUCKETS.includes(bucket)) bucket = 'noise';\n\nlet why = String(v.why || '').slice(0, 240);\nconst angle = String(v.publish_angle || '').slice(0, 240);\n\n// Rubric echo guard: when the model pastes the prompt's own wording into \"why\"\n// it has not read the article, and its score means nothing.\nconst RUBRIC_ECHO = /covers security, cves|cves, breaches, exploits|incident writeups, hardening|kubernetes, cloud, databases|llms, (?:inference, )?agents|self-hosting, (?:homelab hardware|proxmox)|object storage (?:and|\\/) s3|funding, m&a, earnings|general tech news, launches/i;\nconst echoed = RUBRIC_ECHO.test(why);\nif (echoed) {\n  score = Math.min(score, 4);\n  why = `[unverified] ${why}`.slice(0, 240);\n}\n\n// Commerce is classified deterministically in Prep entries. The model gets no\n// vote: a deal must never be starred, notified or written into curator_items.\nconst isCommerce = !!src.isCommerce;\nif (isCommerce) {\n  score = 0;\n  bucket = 'noise';\n  if (!why) why = 'Retail deal (classified by feed/category, not scored).';\n}\n\nlet action = score >= 7 ? 'notify' : (score >= 5 ? 'star' : 'skip');\n\nconst isManual = !!($execution && $execution.mode === 'manual');\nconst now = DateTime.now().setZone('America/Chicago');\nconst hm = now.hour + now.minute / 60;\nconst quiet = (hm >= 22 || hm < 7.5);\n\nconst sd = $getWorkflowStaticData('global');\nconst today = now.toFormat('yyyy-LL-dd');\nif (sd.capDate !== today) { sd.capDate = today; sd.capCount = 0; }\nconst DAILY_CAP = 8;\n\nconst wasNotify = action === 'notify';\nif (action === 'notify' && !isManual) {\n  if (quiet || (sd.capCount || 0) >= DAILY_CAP) action = 'star';\n  else sd.capCount = (sd.capCount || 0) + 1;\n}\n\nif (!hasId) action = 'skip';\n\nconst emoji = ({\n  news: '📰', business: '💵', ai: '🤖', security: '🔒',\n  infra: '⚙️', storage: '🗄️', homelab: '🏠', career: '🎯', noise: '·',\n})[bucket] || '•';\n\nconst gotifyPriority = score >= 9 ? 8 : 6;\nconst gotifyTitle = `${emoji} [${score}] ${src.feed || ''}`.slice(0, 120);\nlet gotifyMessage = `**${src.title}**\\n\\n${why}`;\nif (angle && !isCommerce) gotifyMessage += `\\n\\n✍️ Post angle: ${angle}`;\ngotifyMessage += `\\n\\n${src.url}`;\n\nreturn {\n  json: {\n    id: entryId, entryId,\n    url: src.url, title: src.title, feed: src.feed, category: src.category,\n    score, bucket, why, publish_angle: angle,\n    action, wasNotify, isCommerce, echoed,\n    gotifyPriority, gotifyTitle, gotifyMessage,\n  },\n};"
       },
-      "id": "c0000000-0000-0000-0000-000000000005",
+      "id": "92e91d74-962b-49d1-9c8b-896bae815a2d",
       "name": "Decide",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -360,
-        0
+        -560,
+        128
       ]
     },
     {
@@ -112,15 +119,13 @@
         "rules": {
           "values": [
             {
-              "outputKey": "notify",
-              "renameOutput": true,
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
                   "typeValidation": "strict",
-                  "version": 2
+                  "version": 1
                 },
-                "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action }}",
@@ -128,21 +133,23 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "74815380-b426-40d9-ac1b-24b76383458f"
                   }
-                ]
-              }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "notify"
             },
             {
-              "outputKey": "star",
-              "renameOutput": true,
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
                   "typeValidation": "strict",
-                  "version": 2
+                  "version": 1
                 },
-                "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action }}",
@@ -150,21 +157,23 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "2e3b00db-477c-4f51-b02e-e621b70c3d7d"
                   }
-                ]
-              }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "star"
             },
             {
-              "outputKey": "skip",
-              "renameOutput": true,
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
                   "typeValidation": "strict",
-                  "version": 2
+                  "version": 1
                 },
-                "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action }}",
@@ -172,10 +181,14 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "b136dd7e-6669-4d4e-9867-9849937d2ee5"
                   }
-                ]
-              }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip"
             }
           ]
         },
@@ -183,112 +196,483 @@
           "fallbackOutput": "none"
         }
       },
-      "id": "c0000000-0000-0000-0000-000000000006",
+      "id": "3706dfed-eca7-4cfd-a7ee-21521d477949",
       "name": "notify / star / skip",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        -140,
-        0
+        -240,
+        192
       ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://192.168.4.13:8800/message",
-        "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Gotify-Key",
-              "value": "={{ $env.GOTIFY_CURATOR_TOKEN }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.gotifyTitle, message: $json.gotifyMessage, priority: $json.gotifyPriority, extras: { \"client::display\": { contentType: \"text/markdown\" }, \"client::notification\": { click: { url: $json.url } } } }) }}"
-      },
-      "id": "c0000000-0000-0000-0000-000000000007",
-      "name": "Gotify push",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        80,
-        -160
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.KARAKEEP_URL }}/api/v1/bookmarks",
-        "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.KARAKEEP_TOKEN }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: \"link\", url: $json.url, title: $json.title, note: $json.karakeepNote, favourited: ($json.action === \"notify\") }) }}"
-      },
-      "id": "c0000000-0000-0000-0000-000000000008",
-      "name": "Karakeep: save",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        300,
-        -40
-      ],
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "method": "PUT",
-        "url": "http://miniflux.miniflux.svc.cluster.local:8080/v1/entries",
-        "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Auth-Token",
-              "value": "={{ $env.MINIFLUX_TOKEN }}"
-            }
-          ]
-        },
+        "url": "=https://miniflux.dkghar.duckdns.org/v1/entries/{{ $('Decide').item.json.id }}/bookmark",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "7f6437e1-6269-41c8-8d3d-3a7e84010aeb",
+      "name": "Miniflux: star",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://miniflux.dkghar.duckdns.org/v1/entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ entry_ids: [ $json.id ], status: \"read\" }) }}"
+        "jsonBody": "={{ { entry_ids: [ $('Decide').item.json.id ], status: 'read' } }}",
+        "options": {}
       },
-      "id": "c0000000-0000-0000-0000-000000000009",
+      "id": "0bbca0e6-ab51-4f22-9f76-4e4957f1db81",
       "name": "Miniflux: mark read",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        520,
+        400,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "=Error in Workflow {{ $json.workflow.name }}\n\nNode Executed:{{ $json.execution.lastNodeExecuted }} \n\nError: {{ $json.execution.error.message }}",
+        "additionalFields": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        336
+      ],
+      "id": "78ac2d04-1bbb-488f-9521-7a69bbd5c269",
+      "name": "Error Message",
+      "credentials": {
+        "gotifyApi": {
+          "id": "eMpEOFHPTh4bR4p3",
+          "name": "Gotify Error App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a5524724-e883-4321-a25f-be68702e4b92",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "c7f1a0d2-5b3e-4a19-9f77-2ce4d1b8aa01",
+              "leftValue": "={{ $json.isCommerce }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -416,
+        480
+      ],
+      "id": "5c045299-b744-401a-ae87-080211362e98",
+      "name": "If Score >= 5"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "XkIpj3qeamNBLcBE",
+          "mode": "list",
+          "cachedResultName": "curator_items",
+          "cachedResultUrl": "/projects/3d9NGyVTJDWGNwmq/datatables/XkIpj3qeamNBLcBE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "briefed": false,
+            "entry_id": "={{ $('Decide').item.json.entryId }}",
+            "url": "={{ $('Decide').item.json.url }}",
+            "title": "={{ $('Decide').item.json.title }}",
+            "feed": "={{ $('Decide').item.json.feed }}",
+            "category": "={{ $('Decide').item.json.category }}",
+            "score": "={{ $('Decide').item.json.score }}",
+            "bucket": "={{ $('Decide').item.json.bucket }}",
+            "why": "={{ $('Decide').item.json.why }}",
+            "publish_angle": "={{ $('Decide').item.json.publish_angle }}",
+            "action": "={{ $('Decide').item.json.action }}",
+            "gotify_message": "={{ $('Decide').item.json.gotifyMessage }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "entry_id",
+              "displayName": "entry_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "feed",
+              "displayName": "feed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "bucket",
+              "displayName": "bucket",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "why",
+              "displayName": "why",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "publish_angle",
+              "displayName": "publish_angle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gotify_message",
+              "displayName": "gotify_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "brief_kind",
+              "displayName": "brief_kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "briefed",
+              "displayName": "briefed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -160,
+        480
+      ],
+      "id": "59de758e-c35e-4c93-a956-6e4d20019521",
+      "name": "Insert row"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.gotifyMessage }}",
+        "additionalFields": {
+          "priority": 1,
+          "title": "={{ $json.title }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        624,
+        400
+      ],
+      "id": "3e98c5d4-46c2-4f38-8335-1d7e985e5405",
+      "name": "Send messages to Deal App queue",
+      "credentials": {
+        "gotifyApi": {
+          "id": "K0JLrBnZkZ212JF7",
+          "name": "Gotify Miniflux Curator Deals account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.gotifyMessage }}",
+        "additionalFields": {
+          "priority": "={{ $json.gotifyPriority }}",
+          "title": "={{ $json.gotifyTitle }}"
+        },
+        "options": {
+          "contentType": "text/markdown"
+        }
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        -96,
         0
       ],
-      "onError": "continueRegularOutput"
+      "id": "7974f48d-7382-4296-87c7-dadc9f159d47",
+      "name": "Send feeds to miniflux curator queue",
+      "credentials": {
+        "gotifyApi": {
+          "id": "lmxwOijsBie8YVq7",
+          "name": "Gotify miniflux curator token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "47e33a33-de05-4a55-b474-3d506fadea27",
+              "leftValue": "={{ $json.category }}",
+              "rightValue": "Deal",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16,
+        336
+      ],
+      "id": "2d7be3f4-b2fe-4ceb-8740-e3de2555942a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.gotifyMessage }}",
+        "additionalFields": {
+          "priority": 3,
+          "title": "={{ $json.gotifyTitle }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        160,
+        528
+      ],
+      "id": "34067065-c3f7-4635-9163-c32097e09cd6",
+      "name": "News and Non-tech messages",
+      "credentials": {
+        "gotifyApi": {
+          "id": "gWweIrwLuhHzf9ea",
+          "name": "Gotify Miniflux News and Non-tech App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.gotifyMessage }}",
+        "additionalFields": {
+          "priority": 1,
+          "title": "={{ $json.title }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        432,
+        512
+      ],
+      "id": "0d2187b0-9c26-48d2-9ff8-bb480b3140ee",
+      "name": "Send deals to Khuhsbu",
+      "credentials": {
+        "gotifyApi": {
+          "id": "fumgiOEjj9i99VOK",
+          "name": "Gotify Khusbu Deals"
+        }
+      }
+    },
+    {
+      "id": "fc11004b-777e-40d0-8811-82b1d60c8f56",
+      "name": "Miniflux: get categories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1420,
+        192
+      ],
+      "parameters": {
+        "url": "https://miniflux.dkghar.duckdns.org/v1/categories",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      }
+    },
+    {
+      "id": "dba101d6-be1c-4904-bb57-ea6a011dc423",
+      "name": "Plan scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1370,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// One item per Miniflux category to scan.\n//\n// 2026-09-27: the old single fetch was status=unread&direction=asc&limit=60 -\n// OLDEST first - against a backlog that is 73% Slickdeals (4,800 unread, ~407\n// new/day vs a 360/day scan budget). Deals could never drain, so the curator\n// chewed stale retail while actual news never entered the window. That, not the\n// prompt, is why the brief read as niche.\n//\n// Deals and Firehose are scanned by miniflux-deals-router instead; this node only\n// plans real editorial categories, newest-first.\nconst EXCLUDE = /deal|slickdeal|firehose/i;\nconst cats = $input.all()\n  .map((i) => i.json)\n  .filter((c) => c && c.id && c.title && !EXCLUDE.test(c.title));\n\n// Per-category budget: news sources get room, slow blogs need very little.\nconst BUDGET = {\n  'Tech-News': 14,\n  'Tech-Business': 12,\n  'AI-News': 10,\n  'HN-Trending': 10,\n  'Digests': 8,\n  'Applied-AI-Agents': 8,\n  'Cloud-DevOps': 8,\n  'AI-Infra-Inference': 6,\n  'Object-Storage-Data': 5,\n  'Homelab-K8s': 5,\n  'Career-FDE': 4,\n  'Security-SRE': 4,\n};\n\nconst plan = cats.map((c) => ({\n  json: { category_id: c.id, category_title: c.title, limit: BUDGET[c.title] || 4 },\n}));\nconsole.log('scanning ' + plan.length + ' categories, budget ' + plan.reduce((n, p) => n + p.json.limit, 0) + ' entries');\nreturn plan;"
+      }
     }
   ],
   "connections": {
-    "Every 3h (07-21)": {
-      "main": [
-        [
-          {
-            "node": "Miniflux: get unread",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Miniflux: get unread": {
       "main": [
         [
@@ -319,6 +703,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Error Message",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -329,6 +720,11 @@
             "node": "notify / star / skip",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "If Score >= 5",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -337,14 +733,14 @@
       "main": [
         [
           {
-            "node": "Gotify push",
+            "node": "Send feeds to miniflux curator queue",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Karakeep: save",
+            "node": "Miniflux: star",
             "type": "main",
             "index": 0
           }
@@ -354,31 +750,118 @@
             "node": "Miniflux: mark read",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Gotify push": {
-      "main": [
-        [
+          },
           {
-            "node": "Karakeep: save",
+            "node": "If",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Karakeep: save": {
+    "Miniflux: star": {
       "main": [
         [
           {
             "node": "Miniflux: mark read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Score >= 5": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send messages to Deal App queue": {
+      "main": [
+        []
+      ]
+    },
+    "Send feeds to miniflux curator queue": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: star",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send messages to Deal App queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send deals to Khuhsbu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "News and Non-tech messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 3h (07-21)": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: get categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Miniflux: get categories": {
+      "main": [
+        [
+          {
+            "node": "Plan scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan scan": {
+      "main": [
+        [
+          {
+            "node": "Miniflux: get unread",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "6BhhF0XpgnlXoyap",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 900,
+    "availableInMCP": true,
+    "timeSavedPerExecution": 10
   }
 }

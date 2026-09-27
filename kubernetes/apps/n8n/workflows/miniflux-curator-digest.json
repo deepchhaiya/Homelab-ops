@@ -1,12 +1,8 @@
 {
+  "id": "sp2TWf5mf76sJ1JS",
   "name": "miniflux-curator-digest",
-  "settings": {
-    "executionOrder": "v1",
-    "timezone": "America/Chicago",
-    "saveDataSuccessExecution": "all"
-  },
-  "meta": {},
-  "pinData": {},
+  "active": true,
+  "versionId": "5b5be672-5e2d-4359-abf9-8be185438ed2",
   "nodes": [
     {
       "parameters": {
@@ -19,98 +15,95 @@
           ]
         }
       },
-      "id": "d0000000-0000-0000-0000-000000000001",
+      "id": "739f3d1f-0860-487f-bc2f-3edbbcbaa5ee",
       "name": "Sundays 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -820,
+        0,
         0
       ]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.KARAKEEP_URL }}/api/v1/bookmarks?limit=50",
+        "url": "=https://miniflux.dkghar.duckdns.org/v1/entries?starred=true&direction=desc&limit=100&published_after={{ Math.floor(Date.now()/1000) - 604800 }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 20000
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.KARAKEEP_TOKEN }}"
-            }
-          ]
         }
       },
-      "id": "d0000000-0000-0000-0000-000000000002",
-      "name": "Karakeep: recent bookmarks",
+      "id": "fafd74d0-6ba3-4c9b-9847-c13d3683a4df",
+      "name": "Miniflux: starred last 7d",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -600,
+        224,
         0
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Pull recent Karakeep bookmarks, keep the last 7 days, build the prompt.\nconst res = $input.first().json;\nconst raw = Array.isArray(res.bookmarks) ? res.bookmarks : (Array.isArray(res) ? res : []);\nconst weekAgo = Date.now() - 7 * 24 * 3600 * 1000;\nconst items = raw.filter((b) => {\n  const t = Date.parse(b.createdAt || b.created_at || '');\n  return isNaN(t) ? true : t >= weekAgo;\n});\nconst list = items.map((b, i) => {\n  const c = b.content || {};\n  const url = c.url || b.url || '';\n  const title = b.title || c.title || url || 'untitled';\n  const tags = (b.tags || []).map((t) => t.name || t).filter(Boolean).join(', ');\n  return (i + 1) + '. ' + title + (tags ? '  [' + tags + ']' : '') + '\\n   ' + url;\n}).join('\\n');\n\nconst sys = \"You are the reader's research chief of staff. Their detailed profile is set in this node - replace this block for your own use.\\nGiven the list of items the reader bookmarked this week, produce concise markdown with exactly these sections:\\n## Top 5 reads   (ranked, one line each: what it is + why it matters to the reader's goals; pick from the list only)\\n## 3 post angles (each: a specific title, a 2-bullet outline, which skill/asset it leverages; bias to weekend-sized)\\n## Market signal (one hiring / comp / tech-shift observation worth acting on)\\n## Weekend lab project (one <1 weekend project that would give interview-defensible depth)\\nIf the list is empty, use the reader's standing themes and still produce all four sections.\";\nconst user = items.length\n  ? ('Bookmarks saved this week (' + items.length + '):\\n\\n' + list)\n  : 'Nothing was bookmarked this week. Use the standing themes to still produce all four sections.';\nreturn [{ json: { sysPrompt: sys, userMsg: user, count: items.length } }];\n"
+        "jsCode": "const res = $input.first().json;\nconst ents = Array.isArray(res.entries) ? res.entries : [];\nconst list = ents.map((e, i) => {\n  const cat = (e.feed && e.feed.category && e.feed.category.title) || '-';\n  const feed = (e.feed && e.feed.title) || '';\n  return `${i + 1}. [${cat}] ${e.title} \\u2014 ${feed}\\n   ${e.url}`;\n}).join('\\n');\n\nconst GENERIC_SYS = `You are the reader's research chief of staff. Their detailed profile is injected at runtime. Given the list of articles the reader starred this week, produce concise markdown with exactly these sections:\\n## Top 5 reads  (ranked, one line each: what it is + why it matters to their goals; pick from the list only)\\n## 3 post angles  (each: a specific title, 2 bullet outline, which of their skills/assets it leverages; bias to weekend-sized)\\n## Market signal  (one hiring / comp / tech-shift observation worth acting on)\\n## Weekend lab project  (one <1 weekend project that would give interview-defensible depth)`;\n\nconst envS = \"You are Deep's research chief of staff.\\n\\n[REDACTED IN PUBLIC REPO: reader profile - current role and seniority, target role, publishing/interview goals, and the asset/skill inventory the digest writes from. The live text is in the n8n workflow only.]\\n\\nGiven the list of articles Deep starred this week, produce concise markdown with exactly these sections:\\n## Top 5 reads\\nRanked. One line each: what it is + why it moves Deep's FDE/AI-SE goal. Pick from the list only.\\n## 3 post angles\\nFor each: a specific title, a 2-bullet outline, and which asset it leverages. Bias toward things he can write in a weekend.\\n## Market signal\\nOne hiring / comp / tech-shift observation from the week worth acting on.\\n## Weekend lab project\\nOne project (<1 weekend) that would give interview-defensible depth, tied to inference infra or AI + storage.\\nIf nothing was starred, use the standing themes (AI + object storage, K8s inference serving, homelab automation) and still produce all four sections.\";\nconst sys = envS.length > 40 ? envS : GENERIC_SYS;\n\nconst user = ents.length\n  ? `Articles the reader starred this week (${ents.length}):\\n\\n${list}`\n  : `Nothing was starred this week. Use the reader's standing themes from the profile above to still produce all four sections.`;\n\nreturn [{ json: { sysPrompt: sys, userMsg: user, count: ents.length } }];\n"
       },
-      "id": "d0000000-0000-0000-0000-000000000003",
+      "id": "64d76027-bb8f-4a5a-8311-a6cbf48a30ed",
       "name": "Build digest prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -380,
+        448,
         0
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://192.168.4.12:11434/api/chat",
-        "options": {
-          "timeout": 300000
+        "message": "={{ ($json.message && $json.message.content) || 'no content' }}",
+        "additionalFields": {
+          "priority": 5,
+          "title": "📰 Weekly feed digest"
         },
+        "options": {
+          "contentType": "text/markdown"
+        }
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        912,
+        0
+      ],
+      "id": "9b9c1d9d-455e-4859-a9ad-f3bef5559fd7",
+      "name": "Create a message",
+      "credentials": {
+        "gotifyApi": {
+          "id": "lmxwOijsBie8YVq7",
+          "name": "Gotify miniflux curator token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://192.168.4.84:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"qwen3:4b-instruct\", stream: false, keep_alive: 1800, options: { temperature: 0.4, num_ctx: 16384 }, messages: [ { role: \"system\", content: String($json.sysPrompt || \"\") }, { role: \"user\", content: String($json.userMsg || \"\") } ] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen3.5:9b\", stream: false, think: false, keep_alive: 1800, options: { temperature: 0.4, num_ctx: 16384 }, messages: [ { role: \"system\", content: String($json.sysPrompt || \"\") }, { role: \"user\", content: String($json.userMsg || \"\") } ] }) }}",
+        "options": {
+          "timeout": 300000
+        }
       },
-      "id": "d0000000-0000-0000-0000-000000000004",
+      "id": "22889bb7-1e21-400f-8cd4-e712983625a2",
       "name": "Ollama: synthesize",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -160,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://192.168.4.13:8800/message",
-        "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Gotify-Key",
-              "value": "={{ $env.GOTIFY_CURATOR_TOKEN }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: \"📰 Weekly feed digest\", message: (($json.message && $json.message.content) || \"no content\"), priority: 5, extras: { \"client::display\": { contentType: \"text/markdown\" } } }) }}"
-      },
-      "id": "d0000000-0000-0000-0000-000000000005",
-      "name": "Gotify: digest",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        60,
+        672,
         0
       ]
     }
@@ -120,14 +113,14 @@
       "main": [
         [
           {
-            "node": "Karakeep: recent bookmarks",
+            "node": "Miniflux: starred last 7d",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Karakeep: recent bookmarks": {
+    "Miniflux: starred last 7d": {
       "main": [
         [
           {
@@ -153,12 +146,21 @@
       "main": [
         [
           {
-            "node": "Gotify: digest",
+            "node": "Create a message",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "6BhhF0XpgnlXoyap",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "executionTimeout": 300
   }
 }
