@@ -1,9 +1,12 @@
 {
+  "id": "r1lkdyjINvMfEltY",
   "name": "miniflux-curator-brief-v2",
+  "active": true,
+  "versionId": "14e3a13a-f700-4ad3-98a8-ca90b2e15781",
   "nodes": [
     {
       "parameters": {
-        "path": "=/Notes/ObsidianNotes/Deep_Notes/Journal/curator-briefs/curator_brief_{{ $now.toISO() }}.md",
+        "path": "=/Notes/ObsidianNotes/Deep_Notes/Journal/curator-briefs/curator_brief_{{ $now.toFormat('yyyy-MM-dd_HH-mm-ss') }}.md",
         "fileContent": "={{ $json.brief }}"
       },
       "type": "n8n-nodes-base.nextCloud",
@@ -23,9 +26,13 @@
     },
     {
       "parameters": {
-        "message": "=Today's Brief posted in curator_brief_{{ $now.toISODate() }}.md in NextCloud",
-        "additionalFields": {},
-        "options": {}
+        "message": "={{ ($('Assemble brief').first().json.overview || 'Brief posted.') + '\\n\\n' + $('Assemble brief').first().json.total_items + ' items · curator_brief_' + $now.toFormat('yyyy-MM-dd_HH-mm-ss') + '.md' }}",
+        "additionalFields": {
+          "title": "={{ '📰 ' + $('Assemble brief').first().json.part_of_day + ' brief · ' + $('Assemble brief').first().json.total_items + ' items' }}"
+        },
+        "options": {
+          "contentType": "text/markdown"
+        }
       },
       "type": "n8n-nodes-base.gotify",
       "typeVersion": 1,
@@ -47,7 +54,8 @@
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 7
+              "field": "cronExpression",
+              "expression": "0 7,17 * * *"
             }
           ]
         }
@@ -103,6 +111,10 @@
             {
               "name": "Accept",
               "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
             }
           ]
         },
@@ -123,7 +135,7 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 20000
+          "timeout": 30000
         }
       },
       "id": "39f350eb-a7e3-436e-b794-eed0987a2b87",
@@ -191,7 +203,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// One item per article. Row data comes from Get row(s) via pairedItem;\n// the fetched page text (if any) is on $json.data from the Fetch URL node.\nconst row = $('Get row(s)').item.json;\nconst resp = $json || {};\n\nfunction clean(h) {\n  return String(h || '')\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&[a-z#0-9]+;/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nlet excerpt = '';\nif (resp && resp.data && !resp.error) excerpt = clean(resp.data).slice(0, 6000);\n\nconst SYS = [\n  'You are a precise technical research assistant. You are given ONE article: its title, URL, a curator note, and a text excerpt that may be truncated or empty.',\n  '',\n  'Work in this order and make AT MOST 2 tool calls total — never keep retrying a blocked site:',\n  '1. If the excerpt clearly contains the article substance, summarise from it (no tool calls).',\n  '2. Otherwise make ONE attempt to fetch the URL with your web tools.',\n  '3. If the page is still not usable (anti-bot / JS challenge / paywall / login wall / 404 / only markup), do ONE GENERAL WEB SEARCH about the article topic or title and summarise what reliable sources say about that subject.',\n  '',\n  'Output EXACTLY these three lines, nothing else:',\n  'Topic: <one line>',\n  'Source: <\"article\" if you summarised the actual page or excerpt | \"general web search\" if you used step 3>',\n  'Summary: <2 to 3 paragraphs of plain prose — key technical points, findings or arguments, and why they matter. If Source is \"general web search\", begin the first sentence with exactly: Based on general web search (the original article could not be accessed): . No bullet lists, no preamble, no commentary about your tools or process.>',\n].join('\\n');\n\nconst USER = 'TITLE: ' + (row.title || 'Untitled') +\n  '\\nURL: ' + (row.url || '') +\n  '\\nCURATOR NOTE: ' + (row.why || '') +\n  '\\n\\nEXCERPT:\\n' + (excerpt || '(none - fetch the URL, or fall back to a general web search)');\n\nreturn {\n  json: {\n    row_id: row.id,\n    title: row.title || 'Untitled',\n    url: row.url || '',\n    category: row.category || '',\n    bucket: row.bucket || '',\n    score: row.score != null ? row.score : '',\n    messages: [\n      { role: 'system', content: SYS },\n      { role: 'user', content: USER },\n    ],\n  },\n};\n"
+        "jsCode": "// One item per article.\n// Row data comes from Get row(s) via pairedItem; fetched page HTML is on $json.data.\nconst row = $('Get row(s)').item.json;\nconst resp = $json || {};\n\nconst MAX_CHARS = 7000;   // per-article context budget\n\n// Pull the ARTICLE BODY out of the page, not the whole DOM.\n// The old version stripped tags off everything, so the model was fed nav menus,\n// language pickers and version archives instead of the article.\nfunction extract(html) {\n  let h = String(html || '');\n  h = h.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  h = h.replace(/<(script|style|noscript|svg|form|iframe|template)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  h = h.replace(/<(nav|header|footer|aside)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n\n  let m = h.match(/<(article|main)\\b[^>]*>([\\s\\S]*?)<\\/\\1>/i);\n  if (m) {\n    h = m[2];\n  } else {\n    m = h.match(/<div[^>]+(?:role=[\"']main[\"']|class=[\"'][^\"']*(?:post-content|entry-content|article-body|article__body|markdown-body|prose)[^\"']*[\"'])[^>]*>([\\s\\S]*?)<\\/div>/i);\n    if (m) h = m[1];\n  }\n\n  h = h.replace(/<(p|br|h[1-6]|li|div|tr|blockquote|pre)\\b[^>]*>/gi, '\\n');\n  h = h.replace(/<[^>]+>/g, ' ');\n  h = h.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '\"')\n       .replace(/&#0?39;|&apos;/gi, \"'\").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')\n       .replace(/&[a-z#0-9]+;/gi, ' ');\n\n  const lines = h.split('\\n')\n    .map((l) => l.replace(/[ \\t]+/g, ' ').trim())\n    .filter((l) => l.length > 40);\n  return lines.join('\\n').replace(/\\n{2,}/g, '\\n').trim();\n}\n\n// Length alone is not enough: JS-shell and nav-only pages still yield hundreds of\n// chars of fragments. Real prose has sentences and long lines.\nfunction looksLikeProse(t) {\n  if (!t || t.length < 600) return false;\n  const sentences = (t.match(/[.!?][\"')\\]]?(\\s|$)/g) || []).length;\n  const longLines = t.split('\\n').filter((l) => l.length > 80).length;\n  return sentences >= 6 && longLines >= 3;\n}\n\nlet text = '';\nlet source = 'article';\n\nif (resp && resp.data && !resp.error) text = extract(resp.data).slice(0, MAX_CHARS);\n\n// Tier 2: page unusable (JS shell, SPA, paywall, 404) -> SearXNG.\n// NOTE: as of 2026-09-13 the SearXNG instance returns 0 results for every query\n// (brave/duckduckgo/startpage/wikidata all CAPTCHA'd or suspended). This tier is\n// kept because it is correct once SearXNG is healthy; it degrades to tier 3 today.\nif (!looksLikeProse(text)) {\n  try {\n    const sx = await this.helpers.httpRequest({\n      method: 'GET',\n      url: 'http://searxng.searxng.svc.cluster.local:8080/search',\n      qs: { q: String(row.title || '').slice(0, 220), format: 'json', language: 'en' },\n      json: true,\n      timeout: 15000,\n    });\n    const hits = ((sx && sx.results) || []).slice(0, 6)\n      .map((r) => `${r.title}\\n${r.url}\\n${String(r.content || '').trim()}`)\n      .filter((s) => s.length > 60);\n    if (hits.length) {\n      text = hits.join('\\n\\n').slice(0, MAX_CHARS);\n      source = 'general web search';\n    }\n  } catch (e) {\n    // fall through to tier 3\n  }\n}\n\n// Tier 3: nothing retrievable. Do NOT invent an article summary - describe what the\n// curator already asserted, clearly labelled, so the entry is still useful.\nif (source === 'article' && !looksLikeProse(text)) {\n  source = 'curator note only';\n  text = '';\n}\n\nlet SYS;\nif (source === 'curator note only') {\n  SYS = [\n    'You are writing ONE entry of a daily briefing for an experienced infrastructure and platform engineer.',\n    'The article page could NOT be retrieved (JS-only page, paywall, or anti-bot), and web search is unavailable.',\n    'You have ONLY the title, URL and the curator note explaining why it was flagged.',\n    '',\n    'Do NOT invent the article contents, findings, numbers or claims.',\n    '',\n    'Output EXACTLY these three lines and nothing else:',\n    'Topic: <the subject, inferred from the title only>',\n    'Source: curator note only',\n    'Summary: <ONE short paragraph, max 3 sentences. State plainly that the page could not be retrieved, then relay what the curator note says this is about and why it was flagged. No speculation about the contents.>',\n  ].join('\\n');\n} else {\n  SYS = [\n    'You are a precise technical research assistant writing ONE entry of a daily briefing for an experienced infrastructure and platform engineer.',\n    '',\n    'You receive one article: its title, URL, an optional curator note, and text captured from the page (it may be truncated mid-sentence).',\n    '',\n    'Rules:',\n    '- Summarise ONLY from the supplied text. Never invent details, numbers, versions or claims.',\n    '- Keep the specifics an engineer would act on: version numbers, API and field names, benchmark figures, architectural choices, tradeoffs, limitations.',\n    '- Write for someone deciding from your summary whether to read the original.',\n    '- If the supplied text turns out to be navigation or boilerplate rather than the article, set Summary to exactly: (page content not retrievable)',\n    '',\n    'Output EXACTLY these three lines and nothing else:',\n    'Topic: <one specific line naming the actual subject, not the title reworded>',\n    'Source: ' + source,\n    'Summary: <2 to 3 paragraphs of plain prose. Lead with the concrete change, finding or claim. Then the mechanism or evidence. Close with why it matters for someone running self-hosted or production infrastructure. No bullet lists, no preamble, no meta-commentary about the text or your process.'\n      + (source === 'general web search' ? ' Begin the first sentence with exactly: Based on general web search (the original article could not be accessed): ' : '')\n      + '>',\n  ].join('\\n');\n}\n\nconst body = source === 'curator note only'\n  ? '(page could not be retrieved)'\n  : text;\n\nconst USER = [\n  'TITLE: ' + (row.title || 'Untitled'),\n  'URL: ' + (row.url || ''),\n  'CURATOR NOTE: ' + (row.why || '(none)'),\n  '',\n  source === 'article' ? 'ARTICLE TEXT:'\n    : source === 'general web search' ? 'WEB SEARCH RESULTS ABOUT THIS ARTICLE (the original page could not be retrieved):'\n    : 'PAGE TEXT:',\n  body,\n].join('\\n');\n\nreturn {\n  json: {\n    row_id: row.id,\n    title: row.title || 'Untitled',\n    url: row.url || '',\n    category: row.category || '',\n    bucket: row.bucket || '',\n    score: row.score != null ? row.score : '',\n    source,\n    chars: text.length,\n    messages: [\n      { role: 'system', content: SYS },\n      { role: 'user', content: USER },\n    ],\n  },\n};\n"
       },
       "id": "e8ed232d-06a0-4364-b869-44faba370b17",
       "name": "Prep item",
@@ -205,23 +217,22 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://hermes-agent.hermes-agent.svc.cluster.local:8642/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "url": "http://192.168.4.84:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, messages: $json.messages } }}",
+        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, think: false, messages: $json.messages, options: { temperature: 0.3, num_ctx: 32768 } } }}",
         "options": {
           "batching": {
             "batch": {
-              "batchSize": 1
+              "batchSize": 2,
+              "batchInterval": 20000
             }
           },
-          "timeout": 200000
+          "timeout": 300000
         }
       },
       "id": "6e4840e6-f958-4f8a-b396-bd4a425a046f",
-      "name": "Hermes summarize",
+      "name": "Summarize (Ollama)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
@@ -229,17 +240,11 @@
         64
       ],
       "alwaysOutputData": true,
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "sclY6NTkAb7qJnGp",
-          "name": "Hermes Key"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Assemble one markdown brief from the per-item Hermes responses.\nconst results = $input.all();\nconst prepped = $('Prep item').all().map((x) => x.json);\nconst today = new Date().toISOString().slice(0, 10);\n\nconst lines = [\n  `# Miniflux Curator Brief — ${today}`,\n  '',\n  `${prepped.length} curated item(s) (curator score >= 5). Per-article summaries by Hermes.`,\n  '',\n];\nconst briefed_ids = [];\n\nprepped.forEach((p, i) => {\n  if (p.row_id !== undefined && p.row_id !== null) briefed_ids.push(p.row_id);\n  const r = results[i] ? results[i].json : {};\n  let text = '';\n  if (r && r.choices && r.choices[0] && r.choices[0].message) {\n    text = String(r.choices[0].message.content || '').trim();\n  } else if (r && r.error) {\n    text = `(summary failed: ${r.error.message || r.error})`;\n  }\n  lines.push(`## ${i + 1}. ${p.title}`);\n  lines.push(p.url);\n  lines.push(`*${p.category} · ${p.bucket} · score ${p.score}*`);\n  lines.push('');\n  lines.push(text || '(no summary returned)');\n  lines.push('');\n});\n\nreturn [{ json: { brief: lines.join('\\n'), total_items: prepped.length, briefed_ids, generated: today } }];\n"
+        "jsCode": "// Build the sectioned body, a skimmable Headlines list, and the prompt for the\n// 'At a glance' opener.\n//\n// Output contract: this node deliberately does NOT emit the final `brief`. It emits\n// sections_md + glance_md + messages; 'Assemble brief' stitches the markdown once the\n// overview text comes back from Ollama.\n//\n// Ollama /api/chat returns { message: { content } }; the old /v1 shape was\n// { choices: [ { message: { content } } ] } - both are handled.\nconst results = $input.all();\nconst prepped = $('Prep item').all().map((x) => x.json);\nconst gate = $('Filter deals + dedupe').all().map((x) => x.json);\nconst today = new Date().toISOString().slice(0, 10);\n\nfunction contentOf(r) {\n  if (!r) return '';\n  if (r.message && typeof r.message.content === 'string') return r.message.content;\n  if (r.choices && r.choices[0] && r.choices[0].message) return String(r.choices[0].message.content || '');\n  return '';\n}\nfunction strip(t) {\n  return String(t || '').replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n}\n\nconst SECTION_ORDER = [\n  ['AI & Top Tech', ['ai', 'news']],\n  ['Business & Market Moves', ['business', 'career']],\n  ['Deep Technical Reads', ['infra', 'storage', 'security']],\n  ['Homelab & Misc', ['homelab', 'noise']],\n];\nfunction sectionTitle(bucket) {\n  const b = String(bucket || '').toLowerCase();\n  const hit = SECTION_ORDER.find(([, buckets]) => buckets.includes(b));\n  return hit ? hit[0] : 'Homelab & Misc';\n}\nconst EMOJI = { news: '📰', business: '💵', ai: '🤖', security: '🔒', infra: '⚙️', storage: '🗄️', homelab: '🏠', career: '🎯', noise: '·' };\n\nconst tally = { article: 0, 'general web search': 0, 'curator note only': 0 };\nlet ok = 0;\nlet failed = 0;\nconst items = [];\n\nprepped.forEach((p, i) => {\n  const r = results[i] ? results[i].json : {};\n  let text = strip(contentOf(r));\n  if (!text && r && r.error) text = `(summary failed: ${r.error.message || r.error})`;\n  if (text && !text.startsWith('(summary failed')) ok += 1; else failed += 1;\n  if (tally[p.source] !== undefined) tally[p.source] += 1;\n  items.push({ ...p, summary: text || '(no summary returned)', section: sectionTitle(p.bucket) });\n});\n\n// Retire every row the gate considered, not just the ones that made the cut.\nconst gateIds = gate.length && Array.isArray(gate[0].eligible_ids) ? gate[0].eligible_ids : [];\nconst briefed_ids = gateIds.length\n  ? gateIds\n  : prepped.map((p) => p.row_id).filter((v) => v !== undefined && v !== null);\n\nconst availableBySection = {};\ngate.forEach((g) => { if (g.section_title) availableBySection[g.section_title] = g.section_available; });\n\n// Ordered item list, used for both the Headlines block and the overview prompt.\nconst ordered = [];\nSECTION_ORDER.forEach(([title]) => {\n  items.filter((it) => it.section === title)\n    .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))\n    .forEach((it) => ordered.push(it));\n});\n\n// Skimmable one-line-per-item list with links.\nconst glance = ordered.map((it) => `- ${EMOJI[String(it.bucket).toLowerCase()] || '•'} **[${it.score}]** [${String(it.title).replace(/[\\[\\]]/g, '')}](${it.url})`);\n\nconst body = [];\nlet n = 0;\nSECTION_ORDER.forEach(([title]) => {\n  const inSection = items.filter((it) => it.section === title)\n    .sort((a, b) => Number(b.score || 0) - Number(a.score || 0));\n  if (!inSection.length) return;\n  const avail = availableBySection[title];\n  const more = (avail && avail > inSection.length) ? ` · ${avail - inSection.length} more held back` : '';\n  body.push(`# ${title}${more}`);\n  body.push('');\n  inSection.forEach((it) => {\n    n += 1;\n    body.push(`## ${n}. ${it.title}`);\n    body.push(it.url);\n    body.push(`*${it.bucket} · ${it.category} · score ${it.score}*`);\n    body.push('');\n    body.push(it.summary);\n    body.push('');\n  });\n});\n\n// Prompt for the 'At a glance' opener. Only the selected items are described, so the\n// opener can never reference something that is not in the brief.\nconst overviewInput = ordered.map((it) => `[${it.bucket} ${it.score}] ${it.title}\\n${String(it.summary).replace(/\\s+/g, ' ').slice(0, 260)}`).join('\\n\\n');\nconst OSYS = [\n  \"You write the 'At a glance' opener for Deep's tech news brief. He reads it to decide what to click.\",\n  '',\n  'Write 4 to 6 short lines of plain prose. Rules:',\n  '- Lead with the single most important story of this batch.',\n  '- Group related items into one line where they belong together.',\n  '- Cover every theme present, at least in passing: AI, general tech, business/market, technical, homelab.',\n  '- Name specific companies, products and numbers that appear in the items.',\n  '- Use ONLY what is in the list. Never invent a story, a number or an outcome.',\n  '- No preamble, no headings, no bullet markers, no closing summary. Just the lines.',\n].join('\\n');\n\nreturn [{\n  json: {\n    sections_md: body.join('\\n'),\n    glance_md: glance.join('\\n'),\n    total_items: prepped.length,\n    summarised: ok,\n    failed,\n    sources: tally,\n    briefed_ids,\n    generated: today,\n    section_counts: availableBySection,\n    messages: [\n      { role: 'system', content: OSYS },\n      { role: 'user', content: `Items in today's brief (${ordered.length}):\\n\\n${overviewInput}` },\n    ],\n  },\n}];"
       },
       "id": "a146147d-c375-4262-af3d-abc5b268e965",
       "name": "Collect",
@@ -249,9 +254,54 @@
         416,
         64
       ]
+    },
+    {
+      "id": "bbe9a134-45f4-49c7-9a46-7029f288fd16",
+      "name": "Filter deals + dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        64
+      ],
+      "parameters": {
+        "jsCode": "// runOnceForAllItems: the brief's editorial gate. Runs before anything is fetched\n// or summarised, so whatever it drops costs nothing downstream.\n//\n// 1. Drops retail/deal rows (belt and braces - the curator no longer scores them).\n// 2. Collapses identical URLs (same article via a digest feed and its source feed).\n// 3. Collapses NEAR-duplicates by title (2026-09-27). Exact-URL dedupe missed the\n//    common case: one story syndicated across Bloomberg, CNBC and The Verge with\n//    slightly different headlines. Titles are normalised, stopwords dropped, and\n//    compared by Jaccard overlap; >= 0.6 counts as the same story and the higher\n//    score wins.\n// 4. Assigns a SECTION, RESERVES slots per bucket, then caps the section.\n// 5. Emits eligible_ids so Mark briefed retires everything considered - including\n//    the duplicates and the capped-out rows - so the pool cannot grow without bound.\nconst COMMERCE = /deal|slickdeal|coupon|bargain|woot|frugal|shopping|clearance/i;\n\n// key, title, cap, buckets, reserve (minimum slots guaranteed per bucket)\nconst SECTIONS = [\n  ['top', 'AI & Top Tech', 6, ['ai', 'news'], { news: 3, ai: 3 }],\n  ['money', 'Business & Market Moves', 4, ['business', 'career'], { business: 3 }],\n  ['deep', 'Deep Technical Reads', 5, ['infra', 'storage', 'security'], { security: 2 }],\n  ['lab', 'Homelab & Misc', 3, ['homelab', 'noise'], {}],\n];\nconst sectionOf = (bucket) => {\n  const b = String(bucket || '').toLowerCase();\n  const hit = SECTIONS.find(([, , , buckets]) => buckets.includes(b));\n  return hit ? hit[0] : 'lab';\n};\n\nfunction urlKey(u) {\n  return String(u || '').trim().replace(/[#?].*$/, '').replace(/\\/+$/, '').toLowerCase();\n}\nconst byScoreThenRecency = (a, b) => (Number(b.json.score || 0) - Number(a.json.score || 0))\n  || (new Date(b.json.createdAt || 0) - new Date(a.json.createdAt || 0));\n\n// --- near-duplicate helpers -------------------------------------------------\nconst STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'over', 'amid', 'after', 'says', 'say', 'said', 'new', 'now', 'its', 'has', 'have', 'will', 'that', 'this', 'are', 'was', 'were', 'but', 'not', 'you', 'your', 'how', 'why', 'what', 'about', 'more', 'than', 'out', 'off', 'per', 'via', 'amp']);\nfunction normTitle(t) {\n  return String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\\s+/g, ' ').trim();\n}\nfunction titleTokens(t) {\n  return new Set(normTitle(t).split(' ').filter((w) => w.length > 2 && !STOP.has(w)));\n}\nfunction jaccard(a, b) {\n  if (!a.size || !b.size) return 0;\n  let inter = 0;\n  a.forEach((w) => { if (b.has(w)) inter += 1; });\n  return inter / (a.size + b.size - inter);\n}\nconst SIMILAR_AT = 0.6;\n\nconst kept = new Map();\nlet droppedCommerce = 0;\nlet droppedDuplicate = 0;\n\n$input.all().forEach((item, idx) => {\n  const r = item.json || {};\n  if (COMMERCE.test(String(r.category || '')) || COMMERCE.test(String(r.feed || ''))) {\n    droppedCommerce += 1;\n    return;\n  }\n  const key = urlKey(r.url) || `row-${r.id}`;\n  const prev = kept.get(key);\n  if (prev && Number(prev.json.score || 0) >= Number(r.score || 0)) {\n    droppedDuplicate += 1;\n    return;\n  }\n  if (prev) droppedDuplicate += 1;\n  kept.set(key, { json: r, pairedItem: item.pairedItem !== undefined ? item.pairedItem : { item: idx } });\n});\n\n// Everything considered this run gets retired, duplicates included.\nconst eligibleIds = [...kept.values()].map((it) => it.json.id).filter((v) => v !== undefined && v !== null);\n\n// Highest score first, so the survivor of a duplicate group is the best-scored one.\nconst unique = [];\nlet droppedSimilar = 0;\nconst similarLog = [];\n[...kept.values()].sort(byScoreThenRecency).forEach((it) => {\n  const tok = titleTokens(it.json.title);\n  const norm = normTitle(it.json.title);\n  const clash = unique.find((u) => u.norm === norm || jaccard(u.tok, tok) >= SIMILAR_AT);\n  if (clash) {\n    droppedSimilar += 1;\n    if (similarLog.length < 5) similarLog.push(String(it.json.title).slice(0, 48) + ' ~ ' + String(clash.json.title).slice(0, 48));\n    return;\n  }\n  unique.push({ ...it, tok, norm });\n});\n\nconst out = [];\nconst counts = {};\nSECTIONS.forEach(([key, title, cap, , reserve]) => {\n  const pool = unique.filter((it) => sectionOf(it.json.bucket) === key).sort(byScoreThenRecency);\n  const picked = [];\n  const taken = new Set();\n\n  // Reserved slots first, so a loud bucket cannot starve a quiet one.\n  Object.entries(reserve || {}).forEach(([bucket, n]) => {\n    pool.filter((it) => String(it.json.bucket || '').toLowerCase() === bucket)\n      .slice(0, n)\n      .forEach((it) => {\n        if (picked.length < cap && !taken.has(it.json.id)) { picked.push(it); taken.add(it.json.id); }\n      });\n  });\n  pool.forEach((it) => {\n    if (picked.length < cap && !taken.has(it.json.id)) { picked.push(it); taken.add(it.json.id); }\n  });\n\n  picked.sort(byScoreThenRecency);\n  counts[title] = { picked: picked.length, available: pool.length };\n  picked.forEach((it) => {\n    out.push({\n      json: { ...it.json, section_key: key, section_title: title, section_available: pool.length, eligible_ids: eligibleIds },\n      pairedItem: it.pairedItem,\n    });\n  });\n});\n\nconsole.log('brief gate: ' + out.length + ' kept of ' + kept.size + ' eligible; dropped ' + droppedCommerce + ' commerce, ' + droppedDuplicate + ' same-url, ' + droppedSimilar + ' near-duplicate; ' + JSON.stringify(counts));\nif (similarLog.length) console.log('near-duplicates merged: ' + similarLog.join(' | '));\nreturn out;"
+      }
+    },
+    {
+      "id": "b3b6b7bb-622f-45e1-9c6c-72575c492fed",
+      "name": "Ollama: overview",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        64
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.4.84:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3.6:35b-a3b\",\n  \"stream\": false,\n  \"think\": false,\n  \"keep_alive\": 1800,\n  \"options\": { \"temperature\": 0.3, \"num_ctx\": 16384 },\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
+        "options": {
+          "timeout": 300000
+        }
+      }
+    },
+    {
+      "id": "e09cc73f-aeb9-4ec4-bd02-d7a5474f0f71",
+      "name": "Assemble brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        510,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Final markdown: 'At a glance' opener, then a skimmable linked Headlines list,\n// then the full sectioned summaries. The opener is generated by Ollama: overview;\n// if that call failed we simply omit it rather than blocking the brief.\nconst c = $('Collect').first().json;\nconst resp = $json || {};\n\nfunction contentOf(r) {\n  if (r && r.message && typeof r.message.content === 'string') return r.message.content;\n  if (r && r.choices && r.choices[0] && r.choices[0].message) return String(r.choices[0].message.content || '');\n  return '';\n}\nconst overview = String(contentOf(resp))\n  .replace(/<think>[\\s\\S]*?<\\/think>/gi, '')\n  .replace(/^\\s*[-*•]\\s*/gm, '')\n  .trim();\n\nconst partOfDay = new Date().getHours() < 12 ? 'Morning' : 'Evening';\nconst sectionsPresent = Object.keys(c.section_counts || {}).length;\n\nconst out = [\n  `# Miniflux Curator Brief - ${c.generated} (${partOfDay})`,\n  '',\n  `${c.total_items} item(s) across ${sectionsPresent} section(s), selected from ${(c.briefed_ids || []).length} scored candidate(s). Summaries by qwen3.6:35b-a3b.`,\n  `${c.summarised} summarised, ${c.failed} failed · sources: ${c.sources.article} article, ${c.sources['general web search']} web search, ${c.sources['curator note only']} curator-note-only`,\n  '',\n];\n\nif (overview) {\n  out.push('## At a glance', '', overview, '');\n} else {\n  out.push('## At a glance', '', '_(overview unavailable for this run)_', '');\n}\n\nout.push('## Headlines', '', c.glance_md, '', '---', '');\nout.push(c.sections_md);\n\nconst brief = out.join('\\n');\nreturn [{\n  json: {\n    brief,\n    overview: overview || '',\n    total_items: c.total_items,\n    summarised: c.summarised,\n    failed: c.failed,\n    sources: c.sources,\n    briefed_ids: c.briefed_ids,\n    generated: c.generated,\n    part_of_day: partOfDay,\n  },\n}];"
+      }
     }
   ],
-  "pinData": {},
   "connections": {
     "Upload a file": {
       "main": [
@@ -269,17 +319,6 @@
         [
           {
             "node": "Get row(s)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get row(s)": {
-      "main": [
-        [
-          {
-            "node": "Fetch URL",
             "type": "main",
             "index": 0
           }
@@ -323,14 +362,14 @@
       "main": [
         [
           {
-            "node": "Hermes summarize",
+            "node": "Summarize (Ollama)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Hermes summarize": {
+    "Summarize (Ollama)": {
       "main": [
         [
           {
@@ -341,7 +380,51 @@
         ]
       ]
     },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Filter deals + dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter deals + dedupe": {
+      "main": [
+        [
+          {
+            "node": "Fetch URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Collect": {
+      "main": [
+        [
+          {
+            "node": "Ollama: overview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama: overview": {
+      "main": [
+        [
+          {
+            "node": "Assemble brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble brief": {
       "main": [
         [
           {
@@ -353,7 +436,6 @@
       ]
     }
   },
-  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
@@ -362,15 +444,5 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": true,
     "executionTimeout": 1800
-  },
-  "versionId": "5de8823f-0ab7-4db4-97bb-16aaeec2447f",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "aiBuilderAssisted": true,
-    "builderVariant": "mcp",
-    "instanceId": "3d261420f88c71f8f7cdbd56d0ac691341e1acab7c330b978ff2b8fa16d36aae"
-  },
-  "nodeGroups": [],
-  "id": "r1lkdyjINvMfEltY",
-  "tags": []
+  }
 }

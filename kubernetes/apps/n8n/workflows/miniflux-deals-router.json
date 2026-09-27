@@ -1,0 +1,374 @@
+{
+  "id": "v3PS8RYU6vMn5meM",
+  "name": "miniflux-deals-router",
+  "active": true,
+  "versionId": "f72d1487-b658-404c-81e2-d933b935f9cf",
+  "nodes": [
+    {
+      "id": "333bbda3-498f-472d-aa73-1788d2911238",
+      "name": "Every 2h (07:00-21:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        80
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7-21/2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6762869b-4489-4632-900b-6e43a0c4e985",
+      "name": "Get categories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        80
+      ],
+      "parameters": {
+        "url": "https://miniflux.dkghar.duckdns.org/v1/categories",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      }
+    },
+    {
+      "id": "6ad1d681-82ec-4266-8f75-969004f268ee",
+      "name": "Plan deal scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        80
+      ],
+      "parameters": {
+        "jsCode": "// Deals and Firehose only - miniflux-curator deliberately skips these so its LLM\n// budget goes to real news. Firehose (unfiltered HN, llama.cpp releases) is drained\n// silently; deals are delivered to the deal Gotify apps.\n//\n// limit 150 per category is headroom, not a target: normal intake is ~35 fresh deals\n// per 2-hourly run. The headroom means a missed or failed run is caught up by the\n// next one instead of silently ageing out of the 12h notify window.\nconst INCLUDE = /deal|slickdeal|firehose/i;\nconst cats = $input.all().map((i) => i.json).filter((c) => c && c.id && INCLUDE.test(c.title || ''));\nreturn cats.map((c) => ({\n  json: {\n    category_id: c.id,\n    category_title: c.title,\n    limit: 150,\n    silent: /firehose/i.test(c.title),\n  },\n}));"
+      }
+    },
+    {
+      "id": "1a7716e0-60cc-4602-bcbc-ced2be9880e6",
+      "name": "Fetch unread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        80
+      ],
+      "parameters": {
+        "url": "=https://miniflux.dkghar.duckdns.org/v1/entries?status=unread&direction=desc&limit={{ $json.limit }}&category_id={{ $json.category_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5cff83d9-8000-428c-b3ae-a2869ca6895a",
+      "name": "Prep routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "parameters": {
+        "jsCode": "// One item per entry.\n//\n// FRESH_HOURS is the notify window: a deal delivered late is worthless, so anything\n// older is marked read SILENTLY rather than pushed. 12h (not 24h) so deals that\n// appear overnight still arrive with the 07:00 run, but yesterday's do not.\n// The same path drains the ~4,800-entry stale backlog without notifying.\n// Firehose entries are always silent.\nconst FRESH_HOURS = 12;\nconst cutoff = Date.now() - FRESH_HOURS * 3600 * 1000;\nconst out = [];\nconst seen = new Set();\n\n$input.all().forEach((item) => {\n  const plan = item.json || {};\n  const arr = Array.isArray(plan.entries) ? plan.entries : [];\n  arr.forEach((e) => {\n    if (!e || !e.id || seen.has(e.id)) return;\n    seen.add(e.id);\n    const cat = (e.feed && e.feed.category && e.feed.category.title) || '';\n    const feed = (e.feed && e.feed.title) || '';\n    const isFirehose = /firehose/i.test(cat);\n    const published = new Date(e.published_at || 0).getTime();\n    const stale = !published || published < cutoff;\n    out.push({\n      json: {\n        entry_id: e.id,\n        title: String(e.title || '').slice(0, 120),\n        url: e.url,\n        feed,\n        category: cat,\n        published_at: e.published_at || '',\n        silent: isFirehose || stale,\n        message: String(e.title || '') + '\\n\\n' + String(e.url || ''),\n      },\n    });\n  });\n});\n\nconst notify = out.filter((o) => !o.json.silent).length;\nconsole.log('deal router: ' + out.length + ' entries, ' + notify + ' to notify, ' + (out.length - notify) + ' silent (older than ' + FRESH_HOURS + 'h or firehose)');\nreturn out;"
+      }
+    },
+    {
+      "id": "8fe001f1-cca9-4dad-8078-d08817977531",
+      "name": "Notify or drain",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        80
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "notify",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.silent }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "silent",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.silent }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+    {
+      "id": "3e2379b9-742a-4946-bd7d-b69a135b7b59",
+      "name": "Deal App queue",
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "additionalFields": {
+          "priority": 1,
+          "title": "={{ $json.title }}"
+        },
+        "options": {
+          "contentType": "text/markdown"
+        }
+      },
+      "credentials": {
+        "gotifyApi": {
+          "id": "K0JLrBnZkZ212JF7",
+          "name": "Gotify Miniflux Curator Deals account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "658ea932-aba1-428c-9a35-3534a1140986",
+      "name": "Send deals to Khushbu",
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "additionalFields": {
+          "priority": 1,
+          "title": "={{ $json.title }}"
+        },
+        "options": {
+          "contentType": "text/markdown"
+        }
+      },
+      "credentials": {
+        "gotifyApi": {
+          "id": "fumgiOEjj9i99VOK",
+          "name": "Gotify Khusbu Deals"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8af2fdc1-b976-4a74-8f3a-2ac66def8765",
+      "name": "Mark read",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        80
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "https://miniflux.dkghar.duckdns.org/v1/entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ entry_ids: $('Prep routing').all().map((i) => i.json.entry_id), status: 'read' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qx6lZBonRv10MLcT",
+          "name": "Miniflux Token"
+        }
+      },
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "9b6a8cc0-20c1-41d0-a8be-c2ed4e3dc2d0",
+      "name": "Batch deals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -40
+      ],
+      "parameters": {
+        "jsCode": "// Group fresh deals into batches of 30 - a skimmable list per notification, each\n// line a markdown link so the title reads plainly and the URL stays tappable.\n// Newest first, so the top of the list is the freshest thing in the batch.\nconst BATCH = 30;\nconst items = $input.all().map((i) => i.json).filter((d) => d && d.url)\n  .sort((a, b) => new Date(b.published_at || 0) - new Date(a.published_at || 0));\nif (!items.length) return [];\n\nconst total = Math.ceil(items.length / BATCH);\nconst out = [];\n\nfor (let i = 0; i < items.length; i += BATCH) {\n  const chunk = items.slice(i, i + BATCH);\n  const index = Math.floor(i / BATCH) + 1;\n  const lines = chunk.map((d, n) => {\n    // Square brackets in a deal title would break the markdown link syntax.\n    const safe = String(d.title || 'Untitled').replace(/[\\[\\]]/g, '').trim();\n    return `${i + n + 1}. [${safe}](${d.url})`;\n  });\n  out.push({\n    json: {\n      batch_index: index,\n      batch_total: total,\n      count: chunk.length,\n      entry_ids: chunk.map((d) => d.entry_id),\n      title: `🛒 ${chunk.length} new deal${chunk.length === 1 ? '' : 's'}${total > 1 ? ` (${index}/${total})` : ''}`,\n      message: lines.join('\\n'),\n    },\n  });\n}\n\nconsole.log('deal batches: ' + out.length + ' message(s) for ' + items.length + ' fresh deals');\nreturn out;"
+      }
+    }
+  ],
+  "connections": {
+    "Get categories": {
+      "main": [
+        [
+          {
+            "node": "Plan deal scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan deal scan": {
+      "main": [
+        [
+          {
+            "node": "Fetch unread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch unread": {
+      "main": [
+        [
+          {
+            "node": "Prep routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep routing": {
+      "main": [
+        [
+          {
+            "node": "Notify or drain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify or drain": {
+      "main": [
+        [
+          {
+            "node": "Batch deals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deal App queue": {
+      "main": [
+        [
+          {
+            "node": "Send deals to Khushbu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send deals to Khushbu": {
+      "main": [
+        [
+          {
+            "node": "Mark read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch deals": {
+      "main": [
+        [
+          {
+            "node": "Deal App queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 2h (07:00-21:00)": {
+      "main": [
+        [
+          {
+            "node": "Get categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}

@@ -1,12 +1,16 @@
 {
+  "id": "HsaRrtLCGFUjvJe1",
   "name": "Email Summary with Ollama",
+  "active": true,
+  "versionId": "6cccf608-4605-4d19-99e1-65eaa3cef115",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 8
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
             }
           ]
         }
@@ -26,7 +30,7 @@
         "returnAll": true,
         "filters": {
           "readStatus": "unread",
-          "receivedAfter": "={{ $now.minus({days: 1}) }}"
+          "receivedAfter": "={{ $now.minus({days: 3}) }}"
         }
       },
       "type": "n8n-nodes-base.gmail",
@@ -51,7 +55,7 @@
         "returnAll": true,
         "filters": {
           "readStatus": "unread",
-          "receivedAfter": "={{ $now.minus({days: 1}) }}"
+          "receivedAfter": "={{ $now.minus({days: 3}) }}"
         }
       },
       "type": "n8n-nodes-base.gmail",
@@ -83,60 +87,15 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get the merged array from the previous node\nconst emails = $input.all();\n\n// Combine all emails into one formatted text block\nconst emailsText = emails.map((item, index) => {\n  return `Email ${index + 1}:\\nFrom: ${item.json.from || 'Unknown'}\\nSubject: ${item.json.subject || '(No Subject)'}\\nContent: ${item.json.snippet || 'No preview available'}\\n`;\n}).join('\\n---\\n');\n\nreturn {\n  emails: emails,\n  emailCount: emails.length,\n  emailsFormatted: emailsText\n};\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        448,
-        80
-      ],
-      "id": "19f22ef6-4003-4e2b-b379-d0103ecc485e",
-      "name": "Prepare Email Data"
-    },
-    {
-      "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gemma4:e4b",
-          "mode": "list",
-          "cachedResultName": "gemma4:e4b"
-        },
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a professional email summarizer. Analyze all these emails and provide:\n\n1. A brief 2-3 sentence overview\n2. Key action items (bullets)\n3. Summary by sender\n4. Any urgent/important emails\n\nEmails to summarize:\n{{ $input.all()[0].json.emailsFormatted\n }}\n\nOverall Summary:\n\nThen seperate email summary for only importannt and security emails:\n\nInclude brief subject and summary of each important email in below format.  Keep it concise (max 300 words).\n\nFrom: \nSubject:\nSummary: Don't miss your last chance...\n\nFinally for rest of the emails create detailed email summary about sender and content. Keep it very concise under 100 words."
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.ollama",
-      "typeVersion": 1,
-      "position": [
-        656,
-        80
-      ],
-      "id": "53c1db3d-b12d-47aa-bd8e-28ce4eeb979e",
-      "name": "Ollama Summarize All Emails",
-      "credentials": {
-        "ollamaApi": {
-          "id": "OcPZ3FUETgi6pmvt",
-          "name": "Ollama evox2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "message": "=📧 Daily Email Summary\n\n{{ $node['Ollama Summarize All Emails'].json.content }}\n\n",
+        "message": "={{ $json.finalMessage }}",
         "additionalFields": {},
         "options": {}
       },
       "type": "n8n-nodes-base.gotify",
       "typeVersion": 1,
       "position": [
-        1056,
-        80
+        1696,
+        160
       ],
       "id": "cb90bb71-86ed-413f-9157-138c9a813bd2",
       "name": "Send Summary Notification",
@@ -154,8 +113,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -96,
-        288
+        -16,
+        416
       ],
       "id": "038c8e30-8a4b-470d-aed5-3c303dfdfdca",
       "name": "Loop Over Items",
@@ -170,8 +129,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        128,
-        304
+        272,
+        448
       ],
       "id": "c45405af-28bf-4186-a8b8-bc336c3aa2ca",
       "name": "Mark a message as read",
@@ -190,8 +149,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -64,
-        -192
+        -16,
+        -224
       ],
       "id": "2a5c9c19-39f5-4b71-b8f8-14116a430818",
       "name": "Loop Over Items1",
@@ -220,9 +179,352 @@
           "name": "Gmail account"
         }
       }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mailboxIndex",
+              "name": "mailboxIndex",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c59002df-c27d-4f0f-bb51-a227652f2f16",
+      "name": "Tag Mailbox 1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -80,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mailboxIndex",
+              "name": "mailboxIndex",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f8df1a98-9254-45be-ae58-ddbe515edc61",
+      "name": "Tag Mailbox 2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -80,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Runs once per email (from either mailbox, after the merge).\n//\n// 2026-09-16: model moved to qwen3.5:9b (think:false) and the prompt now ships\n// worked examples as real user/assistant turns. Described rules alone let a small\n// model drift - marketing mail using urgent wording (\"Last chance!\") is the\n// classic failure - while a demonstrated answer is copied reliably.\nconst row = $json;\n\nconst SYS = `You are an email triage assistant for a personal inbox. You will be given ONE email's sender, subject, and a short preview/snippet. Score how important it is for the recipient to actually read it, on a 0-10 scale, and classify it into exactly one category.\n\nCategories: health, security, financial, work, personal, scheduling, promotional, newsletter, other.\n\nScoring guidance:\n- 8-10: health/medical results or messages (e.g. lab/diagnostic results, doctor messages, prescription notices), security alerts (login/password/breach), urgent financial deadlines (overdue bills, fraud alerts), time-critical personal/family messages, job interviews.\n- 5-7: work items needing action, appointment confirmations/reminders, non-urgent bills, moderately important personal correspondence.\n- 2-4: informational updates, receipts, low-urgency notifications.\n- 0-1: promotional/marketing emails, sales, newsletters, social-media notifications, spam.\n\nAlways score health results and security alerts high (8+) and promotional/marketing/newsletter content low (0-2), even if the subject line uses urgent-sounding marketing language (\"Last chance!\", \"Sale ends today\", \"24 hours left\").\n\nThe \"summary\" must describe THIS email. Never repeat these instructions, the category list or the scoring bands as the summary.\n\nRespond with ONLY valid JSON, no other text, in exactly this shape:\n{\"score\": <integer 0-10>, \"category\": \"<one category from the list above>\", \"urgent\": <true or false>, \"summary\": \"<one or two plain sentences on what the email is about and why it matters, or why it doesn't>\"}`;\n\n// Worked examples: retail urgency must not beat a real alert, and genuine\n// health/security mail must clear the notification threshold.\nconst SHOTS = [\n  [\n    'From: Old Navy <deals@oldnavy.com>\\nSubject: ⏰ LAST CHANCE! 60% off ends in 24 hours\\nPreview: Final hours to save on the Big Fall Sale. Shop now before it is gone.',\n    '{\"score\": 0, \"category\": \"promotional\", \"urgent\": false, \"summary\": \"Retail sale promotion using countdown wording. No action needed.\"}',\n  ],\n  [\n    'From: MyChart <no-reply@mychart.com>\\nSubject: New lab results available\\nPreview: Your recent bloodwork results have been released by Dr. Patel and are ready to view in MyChart.',\n    '{\"score\": 9, \"category\": \"health\", \"urgent\": true, \"summary\": \"Lab results from Dr. Patel have been released and are waiting to be reviewed in MyChart.\"}',\n  ],\n  [\n    'From: GitHub <noreply@github.com>\\nSubject: A new sign-in to your account from Chrome on Windows\\nPreview: We noticed a new sign-in to your GitHub account from an unrecognised device in Frankfurt, DE.',\n    '{\"score\": 9, \"category\": \"security\", \"urgent\": true, \"summary\": \"GitHub reports a sign-in from an unrecognised device in Frankfurt; verify it was you and rotate credentials if not.\"}',\n  ],\n];\n\nconst USER = `From: ${row.From || 'Unknown'}\\nSubject: ${row.Subject|| '(No Subject)'}\\nPreview: ${row.snippet || '(no preview available)'}`;\n\nconst idx = row.mailboxIndex !== undefined ? row.mailboxIndex : 0;\nconst id = row.id || '';\n\nconst shotMessages = SHOTS.flatMap(([u, a]) => [\n  { role: 'user', content: u },\n  { role: 'assistant', content: a },\n]);\n\nreturn {\n  id,\n  mailboxIndex: idx,\n  from: row.From || 'Unknown',\n  subject: row.Subject || '(No Subject)',\n  snippet: row.snippet || '',\n  link: id ? `https://mail.google.com/mail/u/${idx}/#all/${id}` : '',\n  messages: [\n    { role: 'system', content: SYS },\n    ...shotMessages,\n    { role: 'user', content: USER },\n  ],\n};\n"
+      },
+      "id": "e2591087-dcf9-4a9a-8367-65fb8612caf3",
+      "name": "Prep item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const prep = $('Prep item').item.json;\nconst resp = $json || {};\n\nlet raw = '';\nif (resp.message && resp.message.content) {\n  // Native Ollama /api/chat response\n  raw = String(resp.message.content || '');\n} else if (resp.choices && resp.choices[0] && resp.choices[0].message) {\n  // OpenAI-compatible /v1/chat/completions response\n  raw = String(resp.choices[0].message.content || '');\n} else if (resp.response) {\n  // Native Ollama /api/generate response\n  raw = String(resp.response || '');\n}\n\nfunction parseScore(text) {\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (!match) return null;\n  try {\n    return JSON.parse(match[0]);\n  } catch (e) {\n    return null;\n  }\n}\n\nconst parsed = parseScore(raw) || {};\nconst score = Number.isFinite(Number(parsed.score)) ? Math.max(0, Math.min(10, Number(parsed.score))) : 5;\n\n// Categories are a fixed list; anything else is 'other' rather than a new\n// category silently entering the email_digest table and the Gotify message.\nconst CATEGORIES = ['health', 'security', 'financial', 'work', 'personal', 'scheduling', 'promotional', 'newsletter', 'other'];\nlet category = typeof parsed.category === 'string' ? parsed.category.trim().toLowerCase() : 'other';\nif (!CATEGORIES.includes(category)) category = 'other';\n\nconst urgent = parsed.urgent === true;\nlet summary = typeof parsed.summary === 'string' && parsed.summary.trim()\n  ? parsed.summary.trim()\n  : (raw ? raw.slice(0, 200) : '(Model did not return a usable summary)');\n\n// Echo guard: if the model parroted the prompt instead of describing the email,\n// the verdict is unreliable. The score is deliberately NOT capped here - an\n// unreadable summary is no reason to risk hiding a genuine health or security\n// mail - but it is marked so it is obvious in the digest and the table.\nconst RUBRIC_ECHO = /score how important|scoring guidance|one category from the list|health, security, financial, work|last chance!, sale ends today/i;\nif (RUBRIC_ECHO.test(summary)) {\n  summary = `[unverified] ${summary}`.slice(0, 400);\n}\n\nconst THRESHOLD = 4;\n\nreturn {\n  id: prep.id,\n  mailboxIndex: prep.mailboxIndex,\n  from: prep.from,\n  subject: prep.subject,\n  link: prep.link,\n  category,\n  score,\n  urgent,\n  summary,\n  notified: score >= THRESHOLD,\n};"
+      },
+      "id": "91224b0a-28a0-484c-a08a-e872868d2e79",
+      "name": "Parse score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "brjYQr2S3zEEN3vf",
+          "cachedResultName": "email_digest"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "entry_id": "={{ $json.id }}",
+            "mailbox": "={{ $json.mailboxIndex }}",
+            "from_addr": "={{ $json.from }}",
+            "subject": "={{ $json.subject }}",
+            "category": "={{ $json.category }}",
+            "score": "={{ $json.score }}",
+            "urgent": "={{ $json.urgent }}",
+            "summary": "={{ $json.summary }}",
+            "link": "={{ $json.link }}",
+            "notified": "={{ $json.notified }}",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "entry_id",
+              "displayName": "entry_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "mailbox",
+              "displayName": "mailbox",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "from_addr",
+              "displayName": "from_addr",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgent",
+              "displayName": "urgent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "notified",
+              "displayName": "notified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "fc71b7f7-4463-452a-95a3-b3d74929a1e8",
+      "name": "Log to email_digest",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.score }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 4,
+              "id": "44cfbb6b-f98a-47cf-a14f-04eee884d1cb"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f53b42b-27f0-4dfd-bce5-654872ac4252",
+      "name": "Filter important",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1072,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "score",
+              "order": "descending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1ae5e4b-a590-4f8a-9f5c-02f7111f1e83",
+      "name": "Sort by score desc",
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map((i) => i.json);\n\nfunction emoji(score) {\n  if (score >= 8) return '🔴';\n  if (score >= 6) return '🟠';\n  return '🟡';\n}\n\nconst blocks = items.map((e) => {\n  const tag = e.urgent ? ' · URGENT' : '';\n  return `${emoji(e.score)} ${e.score}/10 · ${e.category}${tag}\\n${e.subject}\\nFrom: ${e.from}\\n${e.summary}\\n🔗 ${e.link}`;\n});\n\nconst finalMessage = `📧 Email Digest — ${items.length} important email(s)\\n\\n${blocks.join('\\n\\n')}`;\n\nreturn [{ json: { finalMessage } }];\n"
+      },
+      "id": "0de4f2f7-f478-43c8-9b03-318e0b3f7482",
+      "name": "Build Gotify Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://192.168.4.84:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3.5:9b\",\n  \"stream\": false,\n  \"format\": \"json\",\n  \"think\": false,\n  \"keep_alive\": 1800,\n  \"options\": { \"temperature\": 0.1, \"num_ctx\": 8192 },\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "af58aa16-7578-423c-bb11-3014673ca34b",
+      "name": "Ollama: score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        96
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "message": "=Error in Workflow {{ $json.workflow.name }}\n\nNode Executed:{{ $json.execution.lastNodeExecuted }} \n\nError: {{ $json.execution.error.message }}",
+        "additionalFields": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        800,
+        288
+      ],
+      "id": "a4719ef6-1ee0-43b1-9ac4-ad47ab3f61d8",
+      "name": "Create a message",
+      "credentials": {
+        "gotifyApi": {
+          "id": "eMpEOFHPTh4bR4p3",
+          "name": "Gotify Error App"
+        }
+      }
     }
   ],
-  "pinData": {},
   "connections": {
     "Schedule Trigger": {
       "main": [
@@ -244,12 +546,12 @@
       "main": [
         [
           {
-            "node": "Merge Emails from Both Accounts",
+            "node": "Loop Over Items1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Loop Over Items1",
+            "node": "Tag Mailbox 1",
             "type": "main",
             "index": 0
           }
@@ -265,49 +567,11 @@
             "index": 0
           },
           {
-            "node": "Merge Emails from Both Accounts",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Emails from Both Accounts": {
-      "main": [
-        [
-          {
-            "node": "Prepare Email Data",
+            "node": "Tag Mailbox 2",
             "type": "main",
             "index": 0
           }
         ]
-      ]
-    },
-    "Prepare Email Data": {
-      "main": [
-        [
-          {
-            "node": "Ollama Summarize All Emails",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ollama Summarize All Emails": {
-      "main": [
-        [
-          {
-            "node": "Send Summary Notification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Summary Notification": {
-      "main": [
-        []
       ]
     },
     "Loop Over Items": {
@@ -355,31 +619,126 @@
           }
         ]
       ]
+    },
+    "Tag Mailbox 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails from Both Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Mailbox 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Emails from Both Accounts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Emails from Both Accounts": {
+      "main": [
+        [
+          {
+            "node": "Prep item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep item": {
+      "main": [
+        [
+          {
+            "node": "Ollama: score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse score": {
+      "main": [
+        [
+          {
+            "node": "Log to email_digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter important",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter important": {
+      "main": [
+        [
+          {
+            "node": "Sort by score desc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by score desc": {
+      "main": [
+        [
+          {
+            "node": "Build Gotify Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gotify Message": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama: score": {
+      "main": [
+        [
+          {
+            "node": "Parse score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
     "availableInMCP": true,
     "timeSavedMode": "fixed",
     "timezone": "America/Chicago",
     "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": "6BhhF0XpgnlXoyap"
-  },
-  "versionId": "77d7917a-0c77-4974-afc6-03e28fb1d7f5",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "3d261420f88c71f8f7cdbd56d0ac691341e1acab7c330b978ff2b8fa16d36aae"
-  },
-  "nodeGroups": [],
-  "id": "HsaRrtLCGFUjvJe1",
-  "tags": [
-    {
-      "updatedAt": "2026-01-08T04:31:56.296Z",
-      "createdAt": "2026-01-08T04:31:56.296Z",
-      "id": "gTcX623pWd1tziQN",
-      "name": "Productivity"
-    }
-  ]
+    "errorWorkflow": "6BhhF0XpgnlXoyap",
+    "binaryMode": "separate"
+  }
 }
