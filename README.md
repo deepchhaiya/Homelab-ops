@@ -163,8 +163,19 @@ Open WebUI sits in front. Ask *"any K8s pods restarting in the last hour?"* or *
 
 ## Docs & Case Studies
 
-- [Self-hosted AI Memory Layer — mem0 → Hindsight](docs/case-study-ai-memory-layer.md)
+**Start here if you want to build something like this:**
+
+- [**Homelab Build Guide**](docs/homelab-build-guide.md) — the whole thing in build order, with verification gates, a table for translating the roles onto your own hardware, and the mistake I made at each stage
+
+**Case studies** — one problem each, with the failure, the decision, and the numbers:
+
+- [A Power-Efficient Tiered Cluster on Mismatched Hardware](docs/case-study-tiered-power-efficient-cluster.md) — always-on core + WOL burst tier, and why workloads select labels rather than hostnames
+- [Storage Architecture — Retiring an NFS Tier](docs/case-study-storage-architecture.md) — a thermal fault, why `nfsd` can't serve from inside an LXC, and the database corruption that put every DB on local disk
 - [GitOps on Talos with Flux CD and SOPS](docs/case-study-gitops-talos-flux.md)
+- [Self-hosted AI Memory Layer — mem0 → Hindsight](docs/case-study-ai-memory-layer.md)
+- [Choosing Local Models for a Self-Hosted AI Pipeline](docs/case-study-local-model-selection.md)
+
+**Decision records:** [`ADR/`](ADR/) — Talos over K3s, Flux over ArgoCD, local-path over NFS for databases, and more.
 
 ---
 
