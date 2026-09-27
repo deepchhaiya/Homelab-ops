@@ -1,0 +1,136 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+## automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - 192.168.4.0/24
+    - 172.16.0.0/12
+
+# Envisalink Integration
+# NOTE: credentials are !secret references in this committed copy. The LIVE config
+# still has them inline - see the README; move them into secrets.yaml.
+envisalink:
+  host: "192.168.4.168"
+  panel_type: "DSC"
+  user_name: !secret envisalink_user
+  password: !secret envisalink_password
+  code: !secret envisalink_code
+  port: 4025
+  evl_version: 3
+  keepalive_interval: 60
+  zonedump_interval: 30
+  timeout: 10
+  panic_type: Police
+  zones:
+    1:
+      name: "Front/Garage Entrance Door"
+      type: "opening"
+    2:
+      name: "Back Entrance Door"
+      type: "opening"
+    4:
+      name: "Office Window"
+      type: "opening"
+    #  name: "First Floor Motion"
+    #  type: "motion"
+  partitions:
+    1:
+      name: "Home Alarm"
+
+##Below are added for Reolink Automation
+stream:
+
+# 2. Allowlist the directories HA is permitted to write to
+homeassistant:
+  # Add to your existing homeassistant: block — do not duplicate the key
+  allowlist_external_dirs:
+    - "/config/www/wd-ext-hdd/recordings"
+    - "/config/www/wd-ext-hdd/recordings/garage"
+    - "/config/www/wd-ext-hdd/recordings/frontdoor"
+    - "/config/www/wd-ext-hdd/recordings/backyard"
+    - "/config/www/wd-ext-hdd/recordings/gifs"
+    - "/config/www/camera_snaps"
+  # Map media_dirs so recordings are browsable in HA Media Browser
+  media_dirs:
+    camera_recordings: "/config/www/wd-ext-hdd/recordings"
+
+# 3. Shell commands
+#    HA's shell_command DOES support service data via templates — the blueprint
+#    passes `cam_name` and `gif_filename` to make_camera_gif so the file written
+#    matches the URL the notification points to (one source of truth).
+#
+#    NOTE: ffmpeg must be available. On HA OS it is built-in.
+#          The official ghcr.io/home-assistant/home-assistant container
+#          ships ffmpeg.
+
+shell_command:
+  # Stitch frame_*.jpg snapshots into an animated GIF.
+  # Called from the blueprint with: { cam_name, gif_filename }.
+  # cam_name = lowercased camera display name (e.g. "garage")
+  # gif_filename = "<cam>_<detection>_<ts>.gif" (computed in blueprint)
+  make_camera_gif: >
+    ffmpeg -y -framerate 2 -pattern_type glob
+    -i "/config/www/camera_snaps/{{ cam_name }}_frame_*.jpg"
+    -vf "scale=640:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer"
+    "/config/www/wd-ext-hdd/recordings/gifs/{{ gif_filename }}"
+
+  # Remove temp frame snapshots after GIF is built - scoped to specific camera
+  # so concurrent events on other cameras don't loose their frames
+  # called from the blueprint with: {cam_name}
+  cleanup_camera_snaps: >
+    find /config/www/camera_snaps -name '{{ cam_name }}_frame_*.jpg' -type f -delete
+
+  # Delete MP4 recordings older than 180 days (across all camera subdirs).
+  # Container path — shell_command runs INSIDE the HA container.
+  cleanup_old_recordings: >
+    find /config/www/wd-ext-hdd/recordings
+    -type f
+    -name "*.mp4"
+    -mtime +180
+    -delete
+
+  # Delete GIF files older than 180 days
+  cleanup_old_gifs: >
+    find /config/www/wd-ext-hdd/recordings/gifs
+    -type f
+    -name "*.gif"
+    -mtime +180
+    -delete
+
+  #cleanup empty dirs
+  cleanup_empty_dirs: >
+    find /config/www/wd-ext-hdd/recordings
+    -mindepth 3 -maxdepth 3 -type d -empty -delete
+
+  # NEW — slice the first <duration_seconds> of an MP4 into a high-quality GIF.
+  # Called from the blueprint with:
+  #   { cam_name, gif_filename, mp4_path, start_seconds, duration_seconds }.
+  # palettegen + paletteuse produce a much cleaner GIF than naive frame stitching.
+  make_camera_gif_from_mp4: >-
+    ffmpeg -y -hide_banner -loglevel error
+    -ss "{{ start_seconds }}" -i "{{ mp4_path }}"
+    -t "{{ duration_seconds }}"
+    -vf "fps=8,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
+    -loop 0
+    "/config/www/wd-ext-hdd/recordings/gifs/{{ gif_filename }}"
+
+  #helper to ensure directories exist before recording
+  mkdir_path: "mkdir -p {{ path }}"
+
+
+# Keeps UI-created automations working
+automation: !include automations.yaml
+
+# Loads all manual YAML files from your new folder
+#automation manual: !include_dir_merge_list automations/

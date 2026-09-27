@@ -1,0 +1,812 @@
+blueprint:
+  name: "Reolink/ONVIF - Smart Detection Notification"
+  description: >
+    Sends mobile notifications when a Reolink or ONVIF camera detects motion,
+    a person, animal, vehicle, or doorbell visitor.
+
+    Two-phase notification approach (like SgtBatten's Frigate blueprint):
+      Phase 1: Instant notification with camera snapshot (fires ~1s after trigger)
+      Phase 2: Updated notification with animated GIF (same tag, replaces phase 1)
+
+    GIF source — IMPORTANT:
+      When record_video is enabled (the default), the GIF is extracted from the
+      START of the recorded MP4 so it includes the `recording_lookback` seconds
+      BEFORE the trigger fired — the GIF actually shows the event you wanted to
+      see. If record_video is disabled, the blueprint falls back to live snapshot
+      capture (which only sees the moments AFTER the trigger and usually misses
+      the actual event — not recommended).
+
+    Features:
+      - Auto-detects person/animal/vehicle/motion from Reolink AI sensors
+      - Doorbell visitor support (frontdoor_visitor sensor)
+      - Two-phase notify: instant snapshot → GIF update (GIF shows pre-event footage)
+      - Configurable notification with tap-to-open camera dashboard
+      - Cooldown to prevent notification spam
+      - Presence-based suppression (optional — skip when home)
+      - Time-based restrictions (optional — only notify at certain hours)
+      - Action buttons: View Live, Silence 30min
+      - Multi-device notification (one GIF, notify all phones)
+
+    Requirements:
+      - Reolink integration or ONVIF integration configured in HA
+      - ffmpeg available (built-in on HA OS/Container)
+      - stream: integration enabled
+      - An active stream consumer (e.g. Advanced Camera Card with preload: true)
+        for the recording_lookback buffer to actually contain pre-event frames
+      - Shell commands defined in configuration.yaml (see configuration_additions.yaml):
+          - shell_command.make_camera_gif_from_mp4   (NEW — extracts GIF from MP4)
+          - shell_command.make_camera_gif            (legacy fallback path)
+          - shell_command.cleanup_camera_snaps
+      - /config/www/camera_snaps/ directory exists
+      - GIF dir symlinked into www/ for /local/ serving
+      - allowlist_external_dirs includes snapshot, GIF, and MP4 paths
+
+    Required new shell_command (add to configuration.yaml):
+
+      shell_command:
+        make_camera_gif_from_mp4: >-
+          mkdir -p "/config/www/wd-ext-hdd/recordings/gifs"
+          && ffmpeg -y -hide_banner -loglevel error
+          -ss "{{ start_seconds }}" -i "{{ mp4_path }}"
+          -t "{{ duration_seconds }}"
+          -vf "fps=8,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
+          -loop 0
+          "/config/www/wd-ext-hdd/recordings/gifs/{{ gif_filename }}"
+
+  domain: automation
+  input:
+    # ── Camera Selection ──────────────────────────────────────────
+    camera_device:
+      name: Camera Device
+      description: >
+        Select the Reolink or ONVIF camera device.
+        All detection sensors are auto-discovered from this device.
+      selector:
+        device:
+          filter:
+            - integration: reolink
+            - integration: onvif
+
+    camera_entity:
+      name: Camera Entity
+      description: >
+        The camera entity for snapshots and recordings.
+        IMPORTANT: Pick the 'Sub' or 'Fluent' entity (H.264) for recordings
+        to play in browsers and the mobile app. 'Main' (H.265) will NOT play.
+      selector:
+        entity:
+          filter:
+            - domain: camera
+              integration: reolink
+            - domain: camera
+              integration: onvif
+
+    camera_name:
+      name: Camera Display Name
+      description: Human-readable name for notifications (e.g. Garage, Frontdoor, Backyard).
+      default: "Camera"
+      selector:
+        text:
+
+    # ── Detection Types ───────────────────────────────────────────
+    detect_person:
+      name: Detect Person
+      description: Trigger on person detection (Reolink AI). Leave off for ONVIF cameras without AI.
+      default: true
+      selector:
+        boolean:
+
+    person_sensor:
+      name: Person Sensor (optional)
+      description: >
+        The person detection sensor. Leave at default if camera doesn't have AI detection.
+        Typically: binary_sensor.<name>_person
+      default: binary_sensor.none
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+
+    detect_animal:
+      name: Detect Animal
+      description: Trigger on animal/pet detection (Reolink AI).
+      default: false
+      selector:
+        boolean:
+
+    animal_sensor:
+      name: Animal Sensor (optional)
+      description: >
+        The animal detection sensor. Leave at default if not available.
+        Typically: binary_sensor.<name>_animal
+      default: binary_sensor.none
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+
+    detect_vehicle:
+      name: Detect Vehicle
+      description: Trigger on vehicle detection (Reolink AI).
+      default: false
+      selector:
+        boolean:
+
+    vehicle_sensor:
+      name: Vehicle Sensor (optional)
+      description: >
+        The vehicle detection sensor. Leave at default if not available.
+        Typically: binary_sensor.<name>_vehicle
+      default: binary_sensor.none
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+
+    detect_motion:
+      name: Detect General Motion
+      description: >
+        Trigger on any motion (fallback). For ONVIF cameras this is typically
+        the only available sensor. For Reolink, you may want to disable this
+        if using person/animal/vehicle detection to avoid duplicate alerts.
+      default: true
+      selector:
+        boolean:
+
+    motion_sensor:
+      name: Motion Sensor
+      description: >
+        The general motion sensor. Required for ONVIF.
+        Typically: binary_sensor.<name>_motion
+      default: binary_sensor.none
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+
+    detect_visitor:
+      name: Detect Doorbell Visitor
+      description: Trigger on doorbell button press (Reolink Doorbell only).
+      default: false
+      selector:
+        boolean:
+
+    visitor_sensor:
+      name: Visitor/Doorbell Sensor (optional)
+      description: >
+        The doorbell press sensor. Leave at default if not a doorbell.
+        Typically: binary_sensor.<name>_visitor
+      default: binary_sensor.none
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+
+    # ── Notification Settings ─────────────────────────────────────
+    notify_device:
+      name: Mobile Devices
+      description: Select one or more mobile devices to send notifications to.
+      selector:
+        device:
+          multiple: true
+          filter:
+            integration: mobile_app
+
+    notify_group:
+      name: Notification Group (optional)
+      description: >
+        Override device with a notification group (e.g. notify.family_phones).
+        Leave empty to use the selected mobile device above.
+      default: ""
+      selector:
+        text:
+
+    lovelace_camera_path:
+      name: Camera Dashboard Path
+      description: >
+        Tapping the notification opens this path in the HA companion app.
+        Must match your dashboard URL path. Example: /lovelace/cameras
+      default: "/lovelace/cameras"
+      selector:
+        text:
+
+    # ── GIF Settings ──────────────────────────────────────────────
+    gif_duration_seconds:
+      name: GIF Duration (seconds)
+      description: >
+        Length of the GIF extracted from the recorded MP4 (record_video must be ON).
+        Starts at the very beginning of the MP4, so it includes the full
+        `recording_lookback` of pre-event footage plus whatever runs after.
+        A value of (recording_lookback + 3) is a good default — it shows the
+        lead-up to the event and a few seconds after. Larger = bigger file.
+      default: 5
+      selector:
+        number:
+          min: 2
+          max: 15
+          step: 1
+          mode: slider
+
+    snapshot_count:
+      name: Number of Snapshots for GIF (fallback only)
+      description: >
+        Used ONLY when record_video is OFF (fallback live-capture path).
+        How many frames to capture. More = smoother but slower.
+        Note: this path captures frames AFTER the trigger fires, so the GIF
+        usually misses the actual event — prefer record_video=ON.
+      default: 6
+      selector:
+        number:
+          min: 3
+          max: 10
+          step: 1
+          mode: slider
+
+    snapshot_interval_ms:
+      name: Snapshot Interval (ms, fallback only)
+      description: >
+        Used ONLY when record_video is OFF. Delay between each live snapshot.
+        500ms = 2 fps.
+      default: 500
+      selector:
+        number:
+          min: 200
+          max: 2000
+          step: 100
+          mode: slider
+
+    # ── Conditions ────────────────────────────────────────────────
+    cooldown:
+      name: Cooldown (seconds)
+      description: Minimum seconds between notifications for this camera.
+      default: 120
+      selector:
+        number:
+          min: 10
+          max: 1800
+          step: 10
+          mode: slider
+
+    presence_entity:
+      name: Presence Entity (optional)
+      description: >
+        A person or group entity. When 'home', notifications are suppressed.
+        Leave empty to always notify. Example: person.deep
+      default: ""
+      selector:
+        entity:
+          filter:
+            domain:
+              - person
+              - group
+
+    presence_filter:
+      name: Suppress When Home
+      description: Skip notifications when presence entity is 'home'.
+      default: false
+      selector:
+        boolean:
+
+    time_start:
+      name: Start Time (optional)
+      description: Only send notifications after this time. Leave at 00:00 to disable.
+      default: "00:00:00"
+      selector:
+        time:
+
+    time_end:
+      name: End Time (optional)
+      description: Only send notifications before this time. Leave at 00:00 to disable.
+      default: "00:00:00"
+      selector:
+        time:
+
+    silence_duration:
+      name: Silence Button Duration (minutes)
+      description: How long the "Silence" action button mutes this automation.
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          mode: slider
+
+    # ── Recording Settings ────────────────────────────────────────
+    record_video:
+      name: Record Motion to Video
+      description: >
+        Record an MP4 of the event. Phase 2 notification's tap action will open
+        the recorded clip directly. If disabled, tap opens the live camera dashboard.
+      default: true
+      selector:
+        boolean:
+
+    recording_duration:
+      name: Recording Duration (seconds)
+      description: >
+        Length of the MP4 clip. Phase 2 notification fires AFTER this many
+        seconds so the file is finalized and tappable.
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 300
+          step: 5
+          mode: slider
+
+    recording_lookback:
+      name: Recording Lookback (seconds)
+      description: >
+        Seconds before motion to include. Requires an active stream consumer
+        (e.g. the Advanced Camera Card with preload: true on a dashboard).
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+          mode: slider
+
+    visitor_minimize_load:
+      name: Doorbell — Minimize Camera Load
+      description: >
+        For doorbell / visitor triggers ONLY, skip the MP4 recording and the
+        Phase 2 GIF capture so the Reolink native app gets uncontested access
+        to the camera for live preview + push-to-talk. Phase 1 snapshot
+        notification still fires — you'll know someone is at the door —
+        but the heavy capture won't interfere with the call.
+
+        Strongly recommended for doorbells: Reolink cameras can saturate CPU
+        when serving the native app's two-way audio while HA is also recording
+        and running ffmpeg. This setting eliminates that contention.
+
+        Has no effect on person/animal/vehicle/motion triggers.
+      default: true
+      selector:
+        boolean:
+
+variables:
+  # Inputs
+  camera_entity: !input camera_entity
+  camera_name: !input camera_name
+  lovelace_camera_path: !input lovelace_camera_path
+  notify_group: !input notify_group
+  snapshot_count: !input snapshot_count
+  snapshot_interval_ms: !input snapshot_interval_ms
+  gif_duration_seconds: !input gif_duration_seconds
+  cooldown: !input cooldown
+  presence_entity: !input presence_entity
+  presence_filter: !input presence_filter
+  time_start: !input time_start
+  time_end: !input time_end
+  silence_duration: !input silence_duration
+  # Detection toggles
+  detect_person: !input detect_person
+  detect_animal: !input detect_animal
+  detect_vehicle: !input detect_vehicle
+  detect_motion: !input detect_motion
+  detect_visitor: !input detect_visitor
+  # Sensor entities
+  person_sensor: !input person_sensor
+  animal_sensor: !input animal_sensor
+  vehicle_sensor: !input vehicle_sensor
+  motion_sensor: !input motion_sensor
+  visitor_sensor: !input visitor_sensor
+  # Notification targets
+  notify_devices: !input notify_device
+  # Computed
+  ts: "{{ now().strftime('%Y%m%d_%H%M%S_%f') }}"
+  rec_date: "{{ now().strftime('%Y/%m/%d') }}"
+  safe_cam_name: "{{ camera_name | lower | replace(' ', '_') }}"
+  # Determine detection type from trigger entity_id
+  detection_type: >-
+    {% if trigger is defined and trigger.entity_id is defined %}
+      {% set eid = trigger.entity_id %}
+      {% if 'person' in eid %}Person
+      {% elif 'animal' in eid or 'pet' in eid %}Animal
+      {% elif 'vehicle' in eid or 'car' in eid %}Vehicle
+      {% elif 'visitor' in eid or 'doorbell' in eid %}Visitor
+      {% else %}Motion
+      {% endif %}
+    {% else %}Motion
+    {% endif %}
+  # Snapshot: saved to /config/www/ so it's served at /local/.
+  # We use frame_00.jpg directly — it's both the Phase 1 image AND the first frame of the GIF.
+  snapshot_path: "/config/www/camera_snaps/{{ safe_cam_name }}_frame_00.jpg"
+  snapshot_url: "/local/camera_snaps/{{ safe_cam_name }}_frame_00.jpg"
+  # GIF: saved to WD ext HDD (mounted at /config/www/wd-ext-hdd/) → served at /local/wd-ext-hdd/...
+  gif_filename: "{{ safe_cam_name }}_{{ detection_type | lower }}_{{ ts }}.gif"
+  gif_local_url: "/local/wd-ext-hdd/recordings/gifs/{{ gif_filename }}"
+  # Recording: MP4 saved alongside camera dir, served via /local/ (mp4 finalized after recording_duration)
+  record_video: !input record_video
+  recording_duration: !input recording_duration
+  recording_lookback: !input recording_lookback
+  visitor_minimize_load: !input visitor_minimize_load
+  recording_filename: "{{ safe_cam_name }}_{{ detection_type | lower }}_{{ ts }}.mp4"
+  recording_dir: "/config/www/wd-ext-hdd/recordings/{{ safe_cam_name }}/{{ rec_date }}"
+  recording_path: "{{ recording_dir }}/{{ recording_filename }}"
+  recording_url: "/local/wd-ext-hdd/recordings/{{ safe_cam_name }}/{{ rec_date }}/{{ recording_filename }}"
+  # Phase 2 click target — recording URL if recorded, else live dashboard
+  phase2_click_target: "{{ recording_url if record_video else lovelace_camera_path }}"
+  # Notification tag — same tag for phase 1 (snapshot) and phase 2 (GIF update)
+  notification_tag: "camera_{{ safe_cam_name }}"
+  # Notification message
+  notification_title: "{{ camera_name }}: {{ detection_type }} Detected"
+  notification_message: >-
+    {% if detection_type == 'Visitor' %}Someone is at the door! {{ now().strftime('%I:%M %p') }}
+    {% elif detection_type == 'Person' %}Person detected on {{ camera_name }} at {{ now().strftime('%I:%M %p') }}
+    {% elif detection_type == 'Animal' %}Animal spotted on {{ camera_name }} at {{ now().strftime('%I:%M %p') }}
+    {% elif detection_type == 'Vehicle' %}Vehicle detected on {{ camera_name }} at {{ now().strftime('%I:%M %p') }}
+    {% else %}Motion detected on {{ camera_name }} at {{ now().strftime('%I:%M %p') }}
+    {% endif %}
+
+trigger:
+  # Person detection (Reolink AI)
+  - platform: state
+    entity_id: !input person_sensor
+    to: "on"
+    enabled: !input detect_person
+    id: person
+
+  # Animal detection (Reolink AI)
+  - platform: state
+    entity_id: !input animal_sensor
+    to: "on"
+    enabled: !input detect_animal
+    id: animal
+
+  # Vehicle detection (Reolink AI)
+  - platform: state
+    entity_id: !input vehicle_sensor
+    to: "on"
+    enabled: !input detect_vehicle
+    id: vehicle
+
+  # General motion (Reolink / ONVIF fallback)
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "on"
+    enabled: !input detect_motion
+    id: motion
+
+  # Doorbell visitor (Reolink Doorbell)
+  - platform: state
+    entity_id: !input visitor_sensor
+    to: "on"
+    enabled: !input detect_visitor
+    id: visitor
+
+  # Silence action — re-enable after duration
+  - platform: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: "silence_{{ this.entity_id }}"
+    id: silence
+
+condition:
+  # Cooldown — don't spam
+  - alias: "Cooldown check"
+    condition: template
+    value_template: >
+      {{ trigger.id == 'silence' or
+         not this.attributes.last_triggered or
+         (now() - this.attributes.last_triggered).total_seconds() > cooldown }}
+
+  # Presence — suppress when home (if enabled)
+  - alias: "Presence check"
+    condition: template
+    value_template: >
+      {{ trigger.id == 'silence' or
+         not presence_filter or
+         presence_entity == '' or
+         states(presence_entity) != 'home' }}
+
+  # Time window — only notify during configured hours (if set)
+  - alias: "Time window check"
+    condition: template
+    value_template: >
+      {% set ts = time_start %}
+      {% set te = time_end %}
+      {{ trigger.id == 'silence' or
+         (ts == '00:00:00' and te == '00:00:00') or
+         (ts <= now().strftime('%H:%M:%S') <= te) if ts < te else
+         (now().strftime('%H:%M:%S') >= ts or now().strftime('%H:%M:%S') <= te) }}
+
+action:
+  # ── Handle silence action button ────────────────────────────────
+  - if:
+      - condition: trigger
+        id: silence
+    then:
+      - action: automation.turn_off
+        target:
+          entity_id: "{{ this.entity_id }}"
+      - delay:
+          minutes: "{{ silence_duration }}"
+      - action: automation.turn_on
+        target:
+          entity_id: "{{ this.entity_id }}"
+    else:
+      # ════════════════════════════════════════════════════════════
+      # Step 0: Prepare directories and capture Phase 1 snapshot
+      # ════════════════════════════════════════════════════════════
+      - action: shell_command.mkdir_path
+        data:
+          path: "{{ recording_dir }}"
+
+      - action: camera.snapshot
+        target:
+          entity_id: "{{ camera_entity }}"
+        data:
+          filename: "{{ snapshot_path }}"
+
+      # ════════════════════════════════════════════════════════════
+      # Step 1: Start MP4 recording (non-blocking)
+      #   SKIPPED for doorbell triggers when visitor_minimize_load is on.
+      # ════════════════════════════════════════════════════════════
+      - if:
+          - condition: template
+            value_template: >-
+              {{ record_video
+                 and not (trigger.id == 'visitor' and visitor_minimize_load) }}
+        then:
+          - action: camera.record
+            target:
+              entity_id: "{{ camera_entity }}"
+            data:
+              filename: "{{ recording_path }}"
+              duration: "{{ recording_duration }}"
+              lookback: "{{ recording_lookback }}"
+
+      # ════════════════════════════════════════════════════════════
+      # PHASE 1: Instant notification with camera snapshot
+      # ════════════════════════════════════════════════════════════
+      - if:
+          - condition: template
+            value_template: "{{ notify_group | length > 0 }}"
+        then:
+          - action: "{{ notify_group }}"
+            data:
+              title: "{{ notification_title }}"
+              message: "{{ notification_message }}"
+              data:
+                # Android image
+                image: "{{ snapshot_url }}"
+                # Android click action (camelCase required)
+                clickAction: "{{ lovelace_camera_path }}"
+                # iOS click action
+                url: "{{ lovelace_camera_path }}"
+                # Same tag for both phases — phase 2 replaces this
+                tag: "{{ notification_tag }}"
+                group: "security_cameras"
+                actions:
+                  - action: URI
+                    title: "View Live"
+                    uri: "{{ lovelace_camera_path }}"
+                  - action: "silence_{{ this.entity_id }}"
+                    title: "Silence {{ silence_duration }}min"
+                    destructive: true
+                # Android
+                ttl: 0
+                priority: high
+                channel: "security_cameras"
+                notification_icon: >-
+                  {% if detection_type == 'Person' %}mdi:account
+                  {% elif detection_type == 'Animal' %}mdi:paw
+                  {% elif detection_type == 'Vehicle' %}mdi:car
+                  {% elif detection_type == 'Visitor' %}mdi:doorbell
+                  {% else %}mdi:motion-sensor
+                  {% endif %}
+                # iOS
+                push:
+                  sound:
+                    name: default
+                    critical: "{{ 1 if detection_type == 'Visitor' else 0 }}"
+                    volume: "{{ 1.0 if detection_type == 'Visitor' else 0.5 }}"
+                attachment:
+                  url: "{{ snapshot_url }}"
+                  content-type: jpeg
+        else:
+          - repeat:
+              for_each: "{{ notify_devices }}"
+              sequence:
+                - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                  data:
+                    title: "{{ notification_title }}"
+                    message: "{{ notification_message }}"
+                    data:
+                      image: "{{ snapshot_url }}"
+                      clickAction: "{{ lovelace_camera_path }}"
+                      url: "{{ lovelace_camera_path }}"
+                      tag: "{{ notification_tag }}"
+                      group: "security_cameras"
+                      actions:
+                        - action: URI
+                          title: "View Live"
+                          uri: "{{ lovelace_camera_path }}"
+                        - action: "silence_{{ this.entity_id }}"
+                          title: "Silence {{ silence_duration }}min"
+                          destructive: true
+                      ttl: 0
+                      priority: high
+                      channel: "security_cameras"
+                      notification_icon: >-
+                        {% if detection_type == 'Person' %}mdi:account
+                        {% elif detection_type == 'Animal' %}mdi:paw
+                        {% elif detection_type == 'Vehicle' %}mdi:car
+                        {% elif detection_type == 'Visitor' %}mdi:doorbell
+                        {% else %}mdi:motion-sensor
+                        {% endif %}
+                      push:
+                        sound:
+                          name: default
+                          critical: "{{ 1 if detection_type == 'Visitor' else 0 }}"
+                          volume: "{{ 1.0 if detection_type == 'Visitor' else 0.5 }}"
+                      attachment:
+                        url: "{{ snapshot_url }}"
+                        content-type: jpeg
+
+      # ────────────────────────────────────────────────────────────
+      # Gate: if this is a doorbell trigger and visitor_minimize_load
+      # is on, stop here. Phase 1 snapshot has already notified you;
+      # we deliberately skip the recording, ffmpeg, and Phase 2 work
+      # so the Reolink native app can serve the visitor call (live
+      # preview + push-to-talk) uncontested by HA.
+      # ────────────────────────────────────────────────────────────
+      - condition: template
+        value_template: >-
+          {{ not (trigger.id == 'visitor' and visitor_minimize_load) }}
+
+      # ════════════════════════════════════════════════════════════
+      # PHASE 2: Build the GIF
+      #   Primary path (record_video=ON): wait for the MP4 to finalize, then
+      #     extract a GIF from its first `gif_duration_seconds` — this slice
+      #     starts at the recording's t=0, which (thanks to recording_lookback)
+      #     contains the seconds BEFORE the trigger fired. The GIF therefore
+      #     shows the actual event instead of frames captured after the fact.
+      #   Fallback path (record_video=OFF): legacy live-snapshot loop. Usually
+      #     misses the event — prefer enabling record_video.
+      # ════════════════════════════════════════════════════════════
+      - if:
+          - condition: template
+            value_template: "{{ record_video }}"
+        then:
+          # Step 2a (MP4 path): wait for the MP4 to finalize. The recording
+          #   started at trigger time and runs for recording_duration; we've
+          #   spent ~1s on Phase 1 already, so wait the rest plus a small
+          #   buffer so the moov atom is written and ffmpeg can seek into it.
+          - delay:
+              seconds: "{{ [(recording_duration | int) - 1, 2] | max + 2 }}"
+
+          # Step 2b (MP4 path): slice the first gif_duration_seconds of the
+          #   recorded MP4 into a high-quality GIF (palette-gen + paletteuse).
+          #   Starts at t=0 so the pre-event lookback is included.
+          - action: shell_command.make_camera_gif_from_mp4
+            data:
+              cam_name: "{{ safe_cam_name }}"
+              gif_filename: "{{ gif_filename }}"
+              mp4_path: "{{ recording_path }}"
+              start_seconds: "0"
+              duration_seconds: "{{ gif_duration_seconds }}"
+
+          # Step 2c (MP4 path): remove the Phase-1 snapshot frame_00.jpg
+          #   (the only frame this path writes; no other frames to clean).
+          - action: shell_command.cleanup_camera_snaps
+            data:
+              cam_name: "{{ safe_cam_name }}"
+        else:
+          # ── Fallback live-capture path (record_video=OFF, legacy) ──
+          # Step 2a (legacy): capture frame_01 .. frame_(N-1) in real time.
+          - repeat:
+              count: "{{ snapshot_count | int - 1 }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ snapshot_interval_ms }}"
+                - action: camera.snapshot
+                  target:
+                    entity_id: "{{ camera_entity }}"
+                  data:
+                    filename: "/config/www/camera_snaps/{{ safe_cam_name }}_frame_{{ '%02d' | format(repeat.index) }}.jpg"
+
+          # Step 2b (legacy): stitch the frame_*.jpg files into a GIF.
+          - action: shell_command.make_camera_gif
+            data:
+              cam_name: "{{ safe_cam_name }}"
+              gif_filename: "{{ gif_filename }}"
+
+          # Step 2c (legacy): remove all frame_*.jpg for this camera.
+          - action: shell_command.cleanup_camera_snaps
+            data:
+              cam_name: "{{ safe_cam_name }}"
+
+      # Step 2e: Update notification with GIF + tap → recorded video URL
+      #   Same `tag` replaces the Phase 1 notification on the device.
+      #   Main tap target is the MP4 (or live view if recording disabled).
+      #   "View Live" sub-action always opens the live dashboard.
+      - if:
+          - condition: template
+            value_template: "{{ notify_group | length > 0 }}"
+        then:
+          - action: "{{ notify_group }}"
+            data:
+              title: "{{ notification_title }}"
+              message: "{{ notification_message }}"
+              data:
+                image: "{{ gif_local_url }}"
+                clickAction: "{{ phase2_click_target }}"
+                url: "{{ phase2_click_target }}"
+                tag: "{{ notification_tag }}"
+                group: "security_cameras"
+                actions:
+                  - action: URI
+                    title: "View Recording"
+                    uri: "{{ phase2_click_target }}"
+                  - action: URI
+                    title: "View Live"
+                    uri: "{{ lovelace_camera_path }}"
+                  - action: "silence_{{ this.entity_id }}"
+                    title: "Silence {{ silence_duration }}min"
+                    destructive: true
+                ttl: 0
+                priority: high
+                channel: "security_cameras"
+                notification_icon: >-
+                  {% if detection_type == 'Person' %}mdi:account
+                  {% elif detection_type == 'Animal' %}mdi:paw
+                  {% elif detection_type == 'Vehicle' %}mdi:car
+                  {% elif detection_type == 'Visitor' %}mdi:doorbell
+                  {% else %}mdi:motion-sensor
+                  {% endif %}
+                push:
+                  sound:
+                    name: default
+                    critical: "{{ 1 if detection_type == 'Visitor' else 0 }}"
+                    volume: "{{ 1.0 if detection_type == 'Visitor' else 0.5 }}"
+                attachment:
+                  url: "{{ gif_local_url }}"
+                  content-type: gif
+        else:
+          - repeat:
+              for_each: "{{ notify_devices }}"
+              sequence:
+                - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                  data:
+                    title: "{{ notification_title }}"
+                    message: "{{ notification_message }}"
+                    data:
+                      image: "{{ gif_local_url }}"
+                      clickAction: "{{ phase2_click_target }}"
+                      url: "{{ phase2_click_target }}"
+                      tag: "{{ notification_tag }}"
+                      group: "security_cameras"
+                      actions:
+                        - action: URI
+                          title: "View Recording"
+                          uri: "{{ phase2_click_target }}"
+                        - action: URI
+                          title: "View Live"
+                          uri: "{{ lovelace_camera_path }}"
+                        - action: "silence_{{ this.entity_id }}"
+                          title: "Silence {{ silence_duration }}min"
+                          destructive: true
+                      ttl: 0
+                      priority: high
+                      channel: "security_cameras"
+                      notification_icon: >-
+                        {% if detection_type == 'Person' %}mdi:account
+                        {% elif detection_type == 'Animal' %}mdi:paw
+                        {% elif detection_type == 'Vehicle' %}mdi:car
+                        {% elif detection_type == 'Visitor' %}mdi:doorbell
+                        {% else %}mdi:motion-sensor
+                        {% endif %}
+                      push:
+                        sound:
+                          name: default
+                          critical: "{{ 1 if detection_type == 'Visitor' else 0 }}"
+                          volume: "{{ 1.0 if detection_type == 'Visitor' else 0.5 }}"
+                      attachment:
+                        url: "{{ gif_local_url }}"
+                        content-type: gif
+
+mode: restart

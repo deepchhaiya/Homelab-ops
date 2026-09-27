@@ -1,0 +1,1168 @@
+- id: '1743706697577'
+  alias: Close Garage door after 15 mins
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - number.ghar_garage_door_dooropenduration
+    for:
+      hours: 0
+      minutes: 30
+      seconds: 0
+  conditions:
+  - condition: and
+    conditions:
+    - type: is_no_motion
+      condition: device
+      device_id: 806543fc92346d737eb7334dd6c4cbf8
+      entity_id: e7d9afc31862429e32139f5ef286aa1f
+      domain: binary_sensor
+      for:
+        hours: 0
+        minutes: 5
+        seconds: 0
+    - condition: state
+      entity_id: binary_sensor.garage_crossline_garage_proximity_person
+      state:
+      - 'off'
+      - unavailable
+      - unknown
+      for:
+        hours: 0
+        minutes: 3
+        seconds: 0
+  actions:
+  - delay:
+      hours: 0
+      minutes: 2
+      seconds: 0
+      milliseconds: 0
+  - if:
+    - condition: and
+      conditions:
+      - condition: state
+        entity_id: binary_sensor.garage_crossline_garage_proximity_person
+        state:
+        - 'off'
+      - type: is_no_motion
+        condition: device
+        device_id: 806543fc92346d737eb7334dd6c4cbf8
+        entity_id: e7d9afc31862429e32139f5ef286aa1f
+        domain: binary_sensor
+      - condition: state
+        entity_id: binary_sensor.garage_crossline_garage_proximity_animal
+        state:
+        - 'off'
+        enabled: false
+      - condition: state
+        entity_id: binary_sensor.garage_crossline_garage_proximity_vehicle
+        state:
+        - 'off'
+    then:
+    - action: persistent_notification.create
+      metadata: {}
+      data:
+        message: Closing Garage door in 2 minutes.
+        title: Closing Garage door in 2 mins
+        notification_id: Garage_door_close
+    - device_id: 374fab6011d6c1ca40776b2ab180edba
+      domain: cover
+      entity_id: 1c80fc158309b8fd913549d6c963082b
+      type: close
+    - action: notify.notify
+      metadata: {}
+      data:
+        message: Garage Door closed after 15 minutes and 5 minutes of no motion
+        title: Ghar Garage Door Closed
+    - action: persistent_notification.dismiss
+      metadata: {}
+      data:
+        notification_id: Garage_door_close
+  mode: single
+- id: '1743724882734'
+  alias: Front Entrance Door Open
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.front_garage_entrance_door
+    to: 'on'
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+  conditions: []
+  actions:
+  - variables:
+      snapshot_time: '{{ now().strftime(''%Y%m%d_%H%M%S'') }}'
+  - sequence:
+    - action: camera.snapshot
+      metadata: {}
+      data:
+        filename: /config/www/arlo_snapshots_videos/front_doorbell/frontdoor_open__{{snapshot_time
+          }}.jpg
+      target:
+        entity_id: camera.front_door_fluent
+    - delay:
+        hours: 0
+        minutes: 0
+        seconds: 2
+        milliseconds: 0
+    - action: notify.notify
+      metadata: {}
+      data:
+        message: Close the front/garage entrance door. It's open for more then 5 minutes!
+        title: 'Front/Garage Entrance door open '
+        data:
+          image: https://homeassistant.dkghar.duckdns.org/local/arlo_snapshots_videos/front_doorbell/frontdoor_open__{{snapshot_time
+            }}.jpg
+  mode: single
+- id: '1755730019218'
+  alias: Garage Door Quick State Change + PIR Motion Activates Living Room Light
+  description: ''
+  triggers:
+  - entity_id:
+    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
+    to: open
+    trigger: state
+    enabled: true
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  - entity_id:
+    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
+    to: closed
+    trigger: state
+    enabled: true
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  - trigger: state
+    entity_id:
+    - binary_sensor.wifi_pirchuan_gan_qi_motion
+    to: 'on'
+    enabled: true
+  - trigger: state
+    entity_id:
+    - timer.garage_door_open_state_timer
+    to: active
+    enabled: false
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.wifi_pirchuan_gan_qi_motion
+    state: 'on'
+    enabled: false
+  - condition: sun
+    after: sunset
+    before: sunrise
+  - condition: state
+    entity_id: timer.garage_door_open_state_timer
+    state: active
+    enabled: true
+  - type: is_motion
+    condition: device
+    device_id: 806543fc92346d737eb7334dd6c4cbf8
+    entity_id: e7d9afc31862429e32139f5ef286aa1f
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 1
+    enabled: false
+  actions:
+  - action: switch.turn_on
+    metadata: {}
+    data: {}
+    target:
+      device_id:
+      - 9d78d5bcf590614697b65aa388517b57
+      - daab1334615e250781e5cc2a3991be60
+  - delay:
+      hours: 0
+      minutes: 5
+      seconds: 0
+      milliseconds: 0
+  - action: switch.turn_off
+    metadata: {}
+    data: {}
+    target:
+      device_id:
+      - 9d78d5bcf590614697b65aa388517b57
+      - daab1334615e250781e5cc2a3991be60
+  mode: single
+- id: '1755750389598'
+  alias: Garage Door Timer Automation
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
+    to: open
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 10
+  conditions:
+  - condition: sun
+    after: sunset
+    before: sunrise
+  actions:
+  - action: timer.start
+    metadata: {}
+    data:
+      duration: 00:10:00
+    target:
+      entity_id: timer.garage_door_open_state_timer
+  mode: single
+- id: '1755998087179'
+  alias: Garage Door Closing Timer Reset
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
+    to: closed
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 5
+  conditions:
+  - condition: sun
+    after: sunset
+    before: sunrise
+  actions:
+  - action: timer.start
+    metadata: {}
+    data:
+      duration: 00:04:00
+    target:
+      entity_id: timer.garage_door_open_state_timer
+  mode: single
+- id: '1759603740844'
+  alias: 1 hr temp diff checker
+  description: ''
+  triggers:
+  - trigger: time_pattern
+    hours: /1
+  conditions:
+  - condition: or
+    conditions:
+    - condition: numeric_state
+      entity_id: sensor.bedroom_cool_diff
+      above: 1.5
+      enabled: true
+    - condition: numeric_state
+      entity_id: sensor.bedroom_heat_diff
+      above: 1.5
+  - condition: template
+    value_template: '{{ is_state_attr(''automation.hvac_bedroom_sensor_automation'',
+      ''current'', 0) }}'
+  actions:
+  - action: automation.trigger
+    metadata: {}
+    data:
+      skip_condition: false
+    target:
+      entity_id: automation.hvac_bedroom_sensor_automation
+  mode: single
+- id: '1769490946823'
+  alias: Temple Light Turn On Routine
+  description: ''
+  triggers:
+  - trigger: time
+    at: 07:00:00
+  - trigger: time
+    at: '16:00:00'
+  conditions: []
+  actions:
+  - type: turn_on
+    device_id: 7a3fcee6c34d6bdc34f3a98476c1c4c1
+    entity_id: ca779f5d911b0c809b00e393b639154c
+    domain: switch
+  mode: single
+- id: '1769491124143'
+  alias: Temple Light Turn off routine
+  description: ''
+  triggers:
+  - trigger: time
+    at: '21:00:00'
+  - trigger: time
+    at: '13:00:00'
+  conditions: []
+  actions:
+  - type: turn_off
+    device_id: 7a3fcee6c34d6bdc34f3a98476c1c4c1
+    entity_id: ca779f5d911b0c809b00e393b639154c
+    domain: switch
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 10
+      milliseconds: 0
+  - condition: state
+    state:
+    - 'off'
+    - unavailable
+    entity_id: switch.temple_light
+  - action: switch.turn_off
+    metadata: {}
+    data: {}
+    target:
+      entity_id: switch.temple_light
+  mode: single
+- id: '1769491222523'
+  alias: 'Ganeshji fountain turn on routine '
+  description: ''
+  triggers:
+  - trigger: time
+    at: 08:00:00
+    weekday:
+    - sun
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+  - trigger: time
+    at: 08:05:00
+    weekday:
+    - sun
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+  conditions:
+  - condition: device
+    type: is_off
+    device_id: 31e36135a62c89a6cf053ad33b504ecc
+    entity_id: dff46abd388f5961a9e059ebbfa581d5
+    domain: switch
+  actions:
+  - type: turn_on
+    device_id: 31e36135a62c89a6cf053ad33b504ecc
+    entity_id: dff46abd388f5961a9e059ebbfa581d5
+    domain: switch
+  mode: single
+- id: '1769491272801'
+  alias: Ganeshji Fountain turn off routine
+  description: ''
+  triggers:
+  - trigger: time
+    at: '20:00:00'
+  conditions: []
+  actions:
+  - type: turn_off
+    device_id: 31e36135a62c89a6cf053ad33b504ecc
+    entity_id: dff46abd388f5961a9e059ebbfa581d5
+    domain: switch
+  mode: single
+- id: '1769778192777'
+  alias: Ganeshji Fountain Off Routine
+  description: ''
+  triggers:
+  - trigger: time
+    at: '21:00:00'
+    weekday:
+    - sat
+    - fri
+    - thu
+    - wed
+    - tue
+    - mon
+    - sun
+  - trigger: time
+    at: '21:03:00'
+    weekday:
+    - sat
+    - fri
+    - thu
+    - wed
+    - tue
+    - mon
+    - sun
+  conditions:
+  - condition: device
+    type: is_on
+    device_id: 31e36135a62c89a6cf053ad33b504ecc
+    entity_id: dff46abd388f5961a9e059ebbfa581d5
+    domain: switch
+  actions:
+  - type: turn_off
+    device_id: 31e36135a62c89a6cf053ad33b504ecc
+    entity_id: dff46abd388f5961a9e059ebbfa581d5
+    domain: switch
+  mode: single
+- id: '1776010472129'
+  alias: Camera Recordings - 6 Month Cleanup
+  description: Runs at 3:00 AM daily. Deletes MP4 clips and GIFs older than 180 days
+    from all camera recording subdirectories on the DAS. Uses find with -mtime to
+    safely target only old files.
+  triggers:
+  - at: 03:00:00
+    trigger: time
+  conditions: []
+  actions:
+  - action: shell_command.cleanup_old_recordings
+    data: {}
+  - action: shell_command.cleanup_old_gifs
+    data: {}
+  - action: logbook.log
+    data:
+      name: Camera Cleanup
+      message: 6-month cleanup ran at {{ now().strftime('%Y-%m-%d %H:%M') }}. Deleted
+        clips and GIFs older than 180 days.
+      entity_id: automation.camera_recordings_6_month_cleanup_2
+  mode: single
+- id: '1776018239890'
+  alias: Garage Automation Notifications
+  description: Garage Camera Notifications for any person, animal or vehicle inside
+    walkway line to Deepś Phone, Khusbuś iphone and tablet.
+  use_blueprint:
+    path: reolink_motion_notify_gif.yaml
+    input:
+      notify_device:
+      - c84b08a8b6ae4c728e051cf31c4bd567
+      - 20d777afad46dba380368baef6e6844a
+      - bf19ba0601c4d5348c86f39c5ff10fd0
+      camera_device: 3b38b455145eee4816a810314396a4cc
+      camera_entity: camera.garage_fluent
+      camera_name: Garage Walkway
+      person_sensor: binary_sensor.garage_crossline_walkway_person
+      detect_animal: true
+      animal_sensor: binary_sensor.garage_crossline_walkway_animal
+      detect_vehicle: true
+      vehicle_sensor: binary_sensor.garage_crossline_walkway_vehicle
+      detect_motion: false
+      snapshot_count: 8
+      recording_lookback: 5
+      lovelace_camera_path: /mushroom-dashboard/0
+      detect_visitor: true
+      visitor_sensor: binary_sensor.garage_crossline_garage_proximity_person
+      snapshot_interval_ms: 400
+      visitor_minimize_load: false
+      motion_sensor: binary_sensor.garage_motion
+- id: '1776018402287'
+  alias: Frondoor Notifications
+  description: Frontdoor Camera Notifications for any person, animal or vehicle inside
+    walkway line to Deepś Phone, Khusbuś iphone and tablet.
+  use_blueprint:
+    path: reolink_motion_notify_gif.yaml
+    input:
+      notify_device:
+      - c84b08a8b6ae4c728e051cf31c4bd567
+      - 20d777afad46dba380368baef6e6844a
+      - bf19ba0601c4d5348c86f39c5ff10fd0
+      camera_device: fc97cee867f1857e5326f27a6f02518b
+      camera_entity: camera.front_door_fluent
+      camera_name: Frontdoor Camera
+      person_sensor: binary_sensor.front_door_person
+      detect_animal: true
+      animal_sensor: binary_sensor.front_door_pet
+      detect_vehicle: true
+      vehicle_sensor: binary_sensor.front_door_vehicle
+      detect_motion: false
+      snapshot_count: 8
+      detect_visitor: true
+      visitor_sensor: binary_sensor.front_door_visitor
+      lovelace_camera_path: /mushroom-dashboard/0
+      recording_lookback: 5
+      snapshot_interval_ms: 400
+- id: '1776018658711'
+  alias: Backyard Notifications
+  description: Backyard Person, Pet, Vehicle and Visitor notificaitons to Deepś Phone,
+    Tablet and Khusbuś Iphone
+  use_blueprint:
+    path: reolink_motion_notify_gif.yaml
+    input:
+      camera_device: 59f0e8544faba05c1859ed7998dc34a4
+      camera_entity: camera.reolink_backyard_profile000_mainstream
+      camera_name: Backyard Camera
+      person_sensor: binary_sensor.reolink_backyard_person_detection
+      animal_sensor: binary_sensor.reolink_backyard_pet_detection
+      vehicle_sensor: binary_sensor.reolink_backyard_vehicle_detection
+      detect_animal: true
+      detect_vehicle: true
+      detect_motion: false
+      detect_visitor: false
+      visitor_sensor: binary_sensor.reolink_backyard_visitor_detection
+      notify_device:
+      - 20d777afad46dba380368baef6e6844a
+      - c84b08a8b6ae4c728e051cf31c4bd567
+      - bf19ba0601c4d5348c86f39c5ff10fd0
+      motion_sensor: binary_sensor.reolink_backyard_motion_alarm
+      lovelace_camera_path: /mushroom-dashboard/0
+      recording_lookback: 5
+      snapshot_count: 7
+      snapshot_interval_ms: 400
+      visitor_minimize_load: false
+- id: '1777332982601'
+  alias: HVAC home temperature Automation
+  description: Control cooling based on temperature and humidity including bedroom
+    sensor
+  triggers:
+  - entity_id:
+    - sensor.bedroom_cool_diff
+    above: 1
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 2
+    id: bedroom_temp_high
+    trigger: numeric_state
+    enabled: true
+  - entity_id:
+    - sensor.bedroom_heat_diff
+    above: 1
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 2
+    id: bedroom_temp_low
+    trigger: numeric_state
+    enabled: true
+  - type: temperature
+    device_id: fd37b076c6923e30c30aebef04ef3627
+    entity_id: 5ac0ffc4791105eb8138a777d39852dd
+    domain: sensor
+    trigger: device
+    above: 81
+    for:
+      hours: 0
+      minutes: 3
+      seconds: 0
+    enabled: false
+  conditions:
+  - condition: state
+    entity_id: climate.hallway_thermostat
+    attribute: hvac_action
+    state:
+    - idle
+    for:
+      hours: 0
+      minutes: 15
+      seconds: 0
+  - condition: or
+    conditions:
+    - condition: numeric_state
+      entity_id: sensor.bedroom_heat_diff
+      above: 1
+    - condition: numeric_state
+      entity_id: sensor.bedroom_cool_diff
+      above: 1
+  actions:
+  - variables:
+      bedroom_temp: '{{ states(''sensor.bedroom_t_h_sensor_temperature'') | float(0)
+        }}'
+      heat_set: '{{ states(''sensor.thermostat_heat_set_temperature'') | float(0)
+        }}'
+      cool_set: '{{ states(''sensor.thermostat_cool_set_temperature'') | float(0)
+        }}'
+      thermostat_current_temp: '{{ states(''sensor.hallway_thermostat_temperature'')
+        | float(0) }}'
+      cool_diff: '{{ states(''sensor.bedroom_cool_diff'') | float(0) }}'
+      heat_diff: '{{ states(''sensor.bedroom_heat_diff'') | float(0) }}'
+      hvac_mode: '{{ states(''climate.hallway_thermostat'') }}'
+      temp_cushion_for_set: 1
+      temp_cushion_for_compare: 0.5
+  - choose:
+    - alias: If bedroom is hotter than hallway setpoint and hvac_mode is heat_cool,
+        lower the cooling temperature
+      conditions:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ hvac_mode == ''heat_cool'' }}'
+        - condition: template
+          value_template: '{{ bedroom_temp > (cool_set + temp_cushion_for_set) }}'
+      sequence:
+      - action: climate.set_fan_mode
+        metadata: {}
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          fan_mode: 'on'
+      - delay:
+          hours: 0
+          minutes: 3
+          seconds: 0
+          milliseconds: 0
+      - alias: Lower Cooling Temp
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          target_temp_low: '{{ heat_set }}'
+          target_temp_high: '{{ cool_set - cool_diff - temp_cushion_for_set }}'
+          hvac_mode: heat_cool
+      - action: timer.start
+        metadata: {}
+        target:
+          entity_id: timer.bedroom_temp_control_timer
+        data: {}
+      - delay:
+          minutes: 4
+      - alias: Wait until bedroom temp drops below cushioned cool threshold
+        repeat:
+          sequence:
+          - delay:
+              hours: 0
+              minutes: 2
+              seconds: 0
+              milliseconds: 0
+          until:
+          - condition: or
+            conditions:
+            - alias: If bedroom temp lower then thermostat
+              condition: template
+              value_template: '{{ states(''sensor.bedroom_t_h_sensor_temperature'')
+                | float(0) <= (cool_set - temp_cushion_for_compare) }}'
+            - condition: state
+              entity_id: timer.bedroom_temp_control_timer
+              state:
+              - idle
+      - alias: Reset to original hallway band
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          target_temp_low: '{{ heat_set }}'
+          target_temp_high: '{{ cool_set }}'
+          hvac_mode: heat_cool
+    - alias: If bedroom is cooler than hallway setpoint and hvac mode is heat_cool,
+        raise heating temperature
+      conditions:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ hvac_mode == ''heat_cool'' }}'
+        - condition: template
+          value_template: '{{ bedroom_temp < (heat_set - temp_cushion_for_set) }}'
+      sequence:
+      - action: climate.set_fan_mode
+        metadata: {}
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          fan_mode: 'on'
+      - delay:
+          hours: 0
+          minutes: 2
+          seconds: 0
+          milliseconds: 0
+      - alias: Increase the heating temperature
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          target_temp_low: '{{ heat_set + heat_diff + temp_cushion_for_set }}'
+          target_temp_high: '{{ cool_set }}'
+          hvac_mode: heat_cool
+      - action: timer.start
+        metadata: {}
+        target:
+          entity_id: timer.bedroom_temp_control_timer
+        data: {}
+      - delay:
+          minutes: 4
+      - alias: Wait until bedroom temp rises above cushioned heat threshold
+        repeat:
+          sequence:
+          - delay:
+              hours: 0
+              minutes: 2
+              seconds: 0
+              milliseconds: 0
+          until:
+          - condition: or
+            conditions:
+            - condition: template
+              value_template: '{{ states(''sensor.bedroom_t_h_sensor_temperature'')
+                | float(0) >= (heat_set + temp_cushion_for_compare) }}'
+            - condition: state
+              entity_id: timer.bedroom_temp_control_timer
+              state:
+              - idle
+      - alias: Reset to original hallway band
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          target_temp_low: '{{ heat_set }}'
+          target_temp_high: '{{ cool_set }}'
+          hvac_mode: heat_cool
+    - alias: If bedroom is hotter than hallway setpoint and hvac mode is cool, lower
+        the cooling temperature
+      conditions:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ hvac_mode == ''cool'' }}'
+        - condition: template
+          value_template: '{{ bedroom_temp > (cool_set + temp_cushion_for_set) }}'
+      sequence:
+      - action: climate.set_fan_mode
+        metadata: {}
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          fan_mode: 'on'
+      - delay:
+          hours: 0
+          minutes: 3
+          seconds: 0
+          milliseconds: 0
+      - alias: Lower Cooling Temp
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          hvac_mode: cool
+          temperature: '{{ cool_set - cool_diff - temp_cushion_for_set }}'
+      - action: timer.start
+        metadata: {}
+        target:
+          entity_id: timer.bedroom_temp_control_timer
+        data: {}
+      - delay:
+          minutes: 4
+      - alias: Wait until bedroom temp drops below cushioned cool threshold
+        repeat:
+          sequence:
+          - delay:
+              hours: 0
+              minutes: 2
+              seconds: 0
+              milliseconds: 0
+          until:
+          - condition: or
+            conditions:
+            - condition: template
+              value_template: '{{ states(''sensor.bedroom_t_h_sensor_temperature'')
+                | float(0) <= (cool_set - temp_cushion_for_compare) }}'
+            - condition: state
+              entity_id: timer.bedroom_temp_control_timer
+              state:
+              - idle
+      - alias: Reset to original hallway band
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          hvac_mode: cool
+          temperature: '{{ cool_set }}'
+    - alias: If bedroom is cooler than hallway setpoint and hvac mode is heat, raise
+        heating temperature
+      conditions:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ hvac_mode == ''heat'' }}'
+        - condition: template
+          value_template: '{{ bedroom_temp < (heat_set - temp_cushion_for_set) }}'
+      sequence:
+      - action: climate.set_fan_mode
+        metadata: {}
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          fan_mode: 'on'
+      - delay:
+          hours: 0
+          minutes: 2
+          seconds: 0
+          milliseconds: 0
+      - alias: Increase the heating temperature
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          hvac_mode: heat
+          temperature: '{{ heat_set + heat_diff + temp_cushion_for_set }}'
+      - action: timer.start
+        metadata: {}
+        target:
+          entity_id: timer.bedroom_temp_control_timer
+        data: {}
+      - delay:
+          minutes: 4
+      - alias: Wait until bedroom temp rises above cushioned heat threshold
+        repeat:
+          sequence:
+          - delay:
+              hours: 0
+              minutes: 2
+              seconds: 0
+              milliseconds: 0
+          until:
+          - condition: or
+            conditions:
+            - condition: template
+              value_template: '{{ states(''sensor.bedroom_t_h_sensor_temperature'')
+                | float(0) >= (heat_set + temp_cushion_for_compare) }}'
+            - condition: state
+              entity_id: timer.bedroom_temp_control_timer
+              state:
+              - idle
+      - alias: Reset to original hallway band
+        action: climate.set_temperature
+        target:
+          entity_id: climate.hallway_thermostat
+        data:
+          hvac_mode: heat
+          temperature: '{{ heat_set }}'
+    default:
+    - action: climate.set_fan_mode
+      metadata: {}
+      data:
+        fan_mode: 'off'
+      target:
+        device_id: 8ce253546c37d62d0daedd3a8cf7e821
+    - action: automation.trigger
+      metadata: {}
+      target:
+        entity_id: automation.rack_fan_speed_automation
+      data:
+        skip_condition: true
+    - alias: Reset to original hallway band
+      action: climate.set_temperature
+      target:
+        entity_id: climate.hallway_thermostat
+      data:
+        target_temp_low: '{{ heat_set }}'
+        target_temp_high: '{{ cool_set }}'
+        hvac_mode: heat_cool
+  - action: climate.set_fan_mode
+    metadata: {}
+    data:
+      fan_mode: 'off'
+    target:
+      device_id: 8ce253546c37d62d0daedd3a8cf7e821
+  - action: automation.trigger
+    metadata: {}
+    target:
+      entity_id: automation.rack_fan_speed_automation
+    data:
+      skip_condition: true
+    enabled: true
+  mode: queued
+  max: 2
+- id: '1778546295189'
+  alias: server room temp control
+  description: Turn on HVAC fan when server room temperature rises above 89 for 15
+    minutes.
+  triggers:
+  - type: temperature
+    device_id: a738b1433310ce7349c22435a38d7c23
+    entity_id: e6012312befac54e09ce69e5bf35536d
+    domain: sensor
+    trigger: device
+    above: 90
+    alias: Server Room Temp > 90
+  conditions:
+  - condition: state
+    entity_id: climate.hallway_thermostat
+    attribute: hvac_action
+    state:
+    - idle
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+  actions:
+  - action: fan.set_percentage
+    metadata: {}
+    target:
+      entity_id:
+      - fan.rack_fans_rack_fan_1
+      - fan.rack_fans_rack_fan_2
+    data:
+      percentage: 85
+  - action: climate.set_fan_mode
+    metadata: {}
+    target:
+      device_id: 8ce253546c37d62d0daedd3a8cf7e821
+    data:
+      fan_mode: 'on'
+  - delay:
+      hours: 0
+      minutes: 15
+      seconds: 0
+      milliseconds: 0
+  - action: climate.set_fan_mode
+    metadata: {}
+    target:
+      device_id: 8ce253546c37d62d0daedd3a8cf7e821
+    data:
+      fan_mode: 'off'
+  - action: automation.trigger
+    metadata: {}
+    target:
+      entity_id: automation.rack_fan_speed_automation
+    data:
+      skip_condition: true
+  mode: single
+- id: '1779646759466'
+  alias: Rack Fan Speed Automation
+  description: Increasing/Decreasing fan speed based on server room temperature if
+    manual mode is off.
+  triggers:
+  - alias: Server room temp above 87
+    type: temperature
+    device_id: a738b1433310ce7349c22435a38d7c23
+    entity_id: e6012312befac54e09ce69e5bf35536d
+    domain: sensor
+    trigger: device
+    above: 87
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  - alias: Server room temp between 84 and 87
+    type: temperature
+    device_id: a738b1433310ce7349c22435a38d7c23
+    entity_id: e6012312befac54e09ce69e5bf35536d
+    domain: sensor
+    trigger: device
+    above: 84
+    below: 87
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  - alias: Server room temp between 81 and 84
+    type: temperature
+    device_id: a738b1433310ce7349c22435a38d7c23
+    entity_id: e6012312befac54e09ce69e5bf35536d
+    domain: sensor
+    trigger: device
+    above: 81
+    below: 84
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  - alias: Server room temp below 81
+    type: temperature
+    device_id: a738b1433310ce7349c22435a38d7c23
+    entity_id: e6012312befac54e09ce69e5bf35536d
+    domain: sensor
+    trigger: device
+    above: 50
+    below: 81
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+  conditions:
+  - condition: state
+    entity_id: input_boolean.rack_fan_manual_mode
+    state:
+    - 'off'
+  - condition: not
+    conditions:
+    - condition: state
+      entity_id: climate.hallway_thermostat
+      state:
+      - cooling
+      attribute: hvac_action
+    alias: If current hvac action is not cooling
+  actions:
+  - choose:
+    - conditions:
+      - type: is_temperature
+        condition: device
+        device_id: a738b1433310ce7349c22435a38d7c23
+        entity_id: e6012312befac54e09ce69e5bf35536d
+        domain: sensor
+        above: 87
+        alias: temp > 87
+      sequence:
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_1
+        data:
+          percentage: 65
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_2
+        data:
+          percentage: 68
+    - conditions:
+      - alias: temp > 84 and temp < 87
+        type: is_temperature
+        condition: device
+        device_id: a738b1433310ce7349c22435a38d7c23
+        entity_id: e6012312befac54e09ce69e5bf35536d
+        domain: sensor
+        above: 84
+        below: 87.1
+      sequence:
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_1
+        data:
+          percentage: 45
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_2
+        data:
+          percentage: 49
+    - conditions:
+      - alias: temp > 81 and temp < 84
+        type: is_temperature
+        condition: device
+        device_id: a738b1433310ce7349c22435a38d7c23
+        entity_id: e6012312befac54e09ce69e5bf35536d
+        domain: sensor
+        above: 81
+        below: 84.1
+      sequence:
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_1
+        data:
+          percentage: 35
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_2
+        data:
+          percentage: 39
+    - conditions:
+      - alias: temp < 81
+        type: is_temperature
+        condition: device
+        device_id: a738b1433310ce7349c22435a38d7c23
+        entity_id: e6012312befac54e09ce69e5bf35536d
+        domain: sensor
+        below: 81.1
+      sequence:
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_1
+        data:
+          percentage: 20
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_2
+        data:
+          percentage: 22
+  mode: single
+- id: '1779747704844'
+  alias: Rack fan speed to 90% when Google thermostat starts cooling
+  description: Set the rack custom fan to 90% whenever the Google thermostat enters
+    cooling mode.
+  triggers:
+  - entity_id:
+    - climate.hallway_thermostat
+    to:
+    - cooling
+    trigger: state
+    attribute: hvac_action
+  - entity_id:
+    - climate.hallway_thermostat
+    to:
+    - idle
+    - 'off'
+    - fan
+    trigger: state
+    attribute: hvac_action
+    enabled: true
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: climate.hallway_thermostat
+        state:
+        - cooling
+        attribute: hvac_action
+      sequence:
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_1
+        data:
+          percentage: 90
+      - action: fan.set_percentage
+        metadata: {}
+        target:
+          entity_id: fan.rack_fans_rack_fan_2
+        data:
+          percentage: 94
+      alias: If cooling increase fan speed to 90 and 94 %
+    - conditions:
+      - condition: state
+        entity_id: climate.hallway_thermostat
+        state:
+        - 'off'
+        - idle
+        - fan
+        attribute: hvac_action
+      - condition: not
+        conditions:
+        - condition: state
+          entity_id: climate.hallway_thermostat
+          state:
+          - cooling
+          attribute: hvac_action
+      sequence:
+      - action: automation.trigger
+        metadata: {}
+        target:
+          entity_id: automation.rack_fan_speed_automation
+        data:
+          skip_condition: true
+      alias: If idle or on fan mode go back to usual automation speed
+  mode: single
+- id: '1780249561717'
+  alias: Garage Door Open Notification
+  description: Notify that Garage door is open after 15 minutes
+  triggers:
+  - trigger: state
+    entity_id:
+    - number.ghar_garage_door_dooropenduration
+    to:
+    - 'on'
+    for:
+      hours: 0
+      minutes: 15
+      seconds: 0
+  conditions: []
+  actions:
+  - variables:
+      snapshot_time: '{{ now().strftime(''%Y%m%d_%H%M%S'') }}'
+  - sequence:
+    - action: camera.snapshot
+      metadata: {}
+      data:
+        filename: /config/www/arlo_snapshots_videos/garage/garage_open__{{ snapshot_time
+          }}.jpg
+      target:
+        entity_id: camera.garage_fluent
+    - delay:
+        hours: 0
+        minutes: 0
+        seconds: 2
+        milliseconds: 0
+    - action: notify.notify
+      metadata: {}
+      data:
+        message: Close the front/garage entrance door. It's open for more then 5 minutes!
+        title: 'Front/Garage Entrance door open '
+        data:
+          image: https://homeassistant.dkghar.duckdns.org/local/arlo_snapshots_videos/front_doorbell/frontdoor_open__{{
+            snapshot_time }}.jpg
+  mode: single

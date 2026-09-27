@@ -1,0 +1,14 @@
+# /config/aarlo.yaml
+# Works alongside config flow — no need to touch configuration.yaml
+aarlo:
+  user_agent: iOS
+  reconnect_every: 90         # force reconnect to Arlo event stream every 90 mins
+  refresh_devices_every: 2    # re-fetch device list every 2 hrs
+  stream_timeout: 120         # abandon stale stream after 120s
+  request_timeout: 90
+  media_retry:
+    - 5
+    - 15
+    - 30
+    - 60                      # retry cloud clip download at these intervals
+  save_media_to: "/config/media/aarlo/${camera}/${date}/${time}"
