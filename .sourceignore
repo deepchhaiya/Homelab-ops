@@ -1,5 +1,0 @@
-# Flux source-controller excludes images (*.jpg, *.jpeg, *.png, *.gif, ...) from
-# the GitRepository source artifact by default. Those defaults stay in effect;
-# this negation re-includes the portfolio headshot so the portfolio
-# configMapGenerator can bundle it and the cluster serves it (no external CDN).
-!kubernetes/apps/portfolio/site/profile.jpg

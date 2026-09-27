@@ -92,10 +92,6 @@
         icon: miniflux.svg
         href: http://192.168.4.141:30080
         description: RSS reader
-    - Portfolio:
-        icon: mdi-account-box
-        href: http://192.168.4.141:30900
-        description: Personal portfolio site
 - Monitoring & Updates:
     - Beszel:
         icon: beszel.svg
