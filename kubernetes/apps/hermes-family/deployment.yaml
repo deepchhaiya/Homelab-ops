@@ -98,7 +98,7 @@ spec:
             - { name: data, mountPath: /opt/data }
           resources:
             requests: { cpu: 100m, memory: 512Mi }
-            limits:   { cpu: 2,    memory: 4Gi  }
+            limits:   { cpu: 2,    memory: 4Gi }
           readinessProbe:
             httpGet: { path: /health, port: 8642 }
             initialDelaySeconds: 30

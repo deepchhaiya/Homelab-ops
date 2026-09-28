@@ -3,6 +3,8 @@ kind: DaemonSet
 metadata:
   name: beszel-agent
   namespace: beszel
+  annotations:
+    ignore-check.kube-linter.io/host-network: "agent reads host network interface metrics"
 spec:
   selector:
     matchLabels:

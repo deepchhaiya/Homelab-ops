@@ -1,0 +1,3 @@
+# Keep manifests LF so yamllint new-lines passes regardless of editor/OS.
+*.yaml text eol=lf
+*.yml  text eol=lf

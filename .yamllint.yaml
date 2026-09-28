@@ -9,3 +9,12 @@ rules:
     allowed-values: ["true", "false"]
   document-start:
     present: false   # Flux manifests don't always have ---
+  # House style: compact flow maps like `- { name: X, value: "y" }`, with
+  # values column-aligned across env lists.
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  commas:
+    max-spaces-after: -1
+  colons:
+    max-spaces-after: -1
