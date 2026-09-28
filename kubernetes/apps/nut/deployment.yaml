@@ -3,6 +3,11 @@ kind: Deployment
 metadata:
   name: nut-server
   namespace: nut
+  annotations:
+    # NUT talks to the USB UPS through /dev/bus/usb and serves upsd on the host.
+    ignore-check.kube-linter.io/privileged-container: "USB UPS access via /dev/bus/usb"
+    ignore-check.kube-linter.io/privilege-escalation-container: "implied by privileged; USB UPS access"
+    ignore-check.kube-linter.io/host-network: "upsd must be reachable on the RPi4 host for LAN NUT clients"
 spec:
   replicas: 1
   selector:

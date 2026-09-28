@@ -25,7 +25,7 @@ spec:
       # has the user in /etc/passwd) as root before the app starts.
       initContainers:
         - name: fix-perms
-          image: ghcr.io/vectorize-io/hindsight:latest
+          image: ghcr.io/vectorize-io/hindsight:0.10.1
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c", "chown -R hindsight:hindsight /home/hindsight/.pg0"]
           securityContext:
@@ -34,7 +34,7 @@ spec:
             - { name: data, mountPath: /home/hindsight/.pg0 }
       containers:
         - name: hindsight
-          image: ghcr.io/vectorize-io/hindsight:latest
+          image: ghcr.io/vectorize-io/hindsight:0.10.1
           imagePullPolicy: IfNotPresent
           ports:
             - { containerPort: 8888, name: api }
