@@ -74,6 +74,21 @@ spec:
             # Whole-reflect wall clock (default 300s). Up to 10 tool rounds on a shared
             # local 35B; mental model refreshes run in the background, so allow 15 min.
             - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "900" }
+            # Size reflect's working context to the 65,536-token model window. The default
+            # (100000) makes split-synthesis map chunks of 0.8x = 80k tokens, so a map
+            # prompt filled the window and generation hit its end (done_reason "length" ->
+            # OutputTooLongError). Rule from a similar Talos/Flux deployment
+            # (bluevulpine/flux-talos#1912): budget x1.1 tokenizer slack + ~8k output must
+            # fit the window: 48000*1.1 + 8192 = ~61k < 65,536. Smaller prompts also cut
+            # the full re-prefill qwen3.6 (hybrid) pays every round (hindsight#3865).
+            - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "48000" }
+            # Explicit output cap (default: none). Above the largest mental model
+            # max_tokens (4096) so a legitimate answer is never cut (hindsight#4463).
+            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "8192" }
+            # Default is 4 attempts x 300s: one slow call could hold the single reflect
+            # slot ~20 min. Hindsight's local-LLM guidance: retries rarely help a slow
+            # box; the worker still retries the whole task on failure.
+            - { name: HINDSIGHT_API_REFLECT_LLM_MAX_RETRIES,      value: "2" }
             # --- Recall speed. Reranking runs on this pod's CPU (cross-encoder); the
             # default 300 candidates per recall took ~110s on 3 cores inside reflect.
             # Reflect only uses the top ~10-20 results, so 100 keeps quality.
