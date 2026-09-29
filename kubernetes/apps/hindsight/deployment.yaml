@@ -85,11 +85,11 @@ spec:
             # fit the window: 48000*1.1 + 8192 = ~61k < 65,536. Smaller prompts also cut
             # the full re-prefill qwen3.6 (hybrid) pays every round (hindsight#3865).
             - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "48000" }
-            # Explicit output cap (default: none). Split-synthesis map calls are told to
-            # list EVERY relevant claim with memory ids; on a 90-observation chunk both
-            # maps hit 8192 exactly (OutputTooLongError, 2026-09-29). 16384 fits the
-            # window: largest measured map input 46.7k + 16.4k = 63.1k < 65,536.
-            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "16384" }
+            # Explicit output cap (default: none). Kept at 8192: split-synthesis map calls
+            # grow with their input (every claim + provenance), so broad questions ran to
+            # 8192 and then 16384 alike (2026-09-29). Fix was design-level: only narrow
+            # mental models that never split; this cap just bounds a runaway to ~2.5 min.
+            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "8192" }
             # Default is 4 attempts x 300s: one slow call could hold the single reflect
             # slot ~20 min. Hindsight's local-LLM guidance: retries rarely help a slow
             # box; the worker still retries the whole task on failure.
