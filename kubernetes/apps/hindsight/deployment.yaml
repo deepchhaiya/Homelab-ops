@@ -79,16 +79,15 @@ spec:
             # tool rounds ~180s + 2 serial map calls ~730s + reduce ~100s = ~1010s.
             # Mental-model cron slots are 35 min apart (06:00-08:55 UTC) to fit this.
             - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "1800" }
-            # Sized for the old 65,536-token window; kept after the window went to 262,144
-            # (2026-09-29) because qwen3.6 re-prefills every round, so a bigger budget
-            # slows every reflect. It now only bounds speed, not truncation. The default
-            # (100000) makes split-synthesis map chunks of 0.8x = 80k tokens, so a map
-            # prompt filled the window and generation hit its end (done_reason "length" ->
-            # OutputTooLongError). Rule from a similar Talos/Flux deployment
-            # (bluevulpine/flux-talos#1912): budget x1.1 tokenizer slack + ~8k output must
-            # fit the window: 48000*1.1 + 8192 = ~61k < 65,536. Smaller prompts also cut
-            # the full re-prefill qwen3.6 (hybrid) pays every round (hindsight#3865).
-            - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "48000" }
+            # Reflect's working budget. When retrieved evidence exceeds it, Hindsight splits
+            # it into chunks and runs "list every claim" map calls whose output grows with
+            # input; at 48000 (sized for the old 65,536 window) even the narrow mental
+            # models split (~70k retrieved) and 39 of 66 map calls hit the output cap.
+            # 100000 (Hindsight's default) holds that evidence in one prompt, so there is
+            # no split. Fits the 262,144 window: 100000 x 1.1 tokenizer slack + 8192
+            # output = ~118k (bluevulpine/flux-talos#1912 rule). Cost: qwen3.6 re-prefills
+            # every round (hindsight#3865), ~100s per round at ~940 tok/s.
+            - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "100000" }
             # Explicit output cap (default: none). Kept at 8192: split-synthesis map calls
             # grow with their input (every claim + provenance), so broad questions ran to
             # 8192 and then 16384 alike (2026-09-29). Fix was design-level: only narrow
