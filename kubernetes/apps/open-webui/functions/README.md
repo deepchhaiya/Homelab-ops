@@ -23,6 +23,39 @@ No credentials to type. Both read `HINDSIGHT_URL`, `HINDSIGHT_BANK` and
 `HINDSIGHT_API_KEY` from the pod environment, which `../deployment.yaml` supplies
 from the SOPS secret `open-webui-hindsight`. The Valves are overrides only.
 
+## Native MCP (Open WebUI ≥ 0.6.31)
+
+Open WebUI can also call Hindsight's own MCP server, which gives the model every
+read tool Hindsight has (mental models, knowledge pages), not just the three in
+`hindsight_tool.py`. Use it **instead of** the custom tool, not alongside it, so the
+model does not see duplicate memory tools. Keep the filter for automatic recall.
+
+`TOOL_SERVER_CONNECTIONS` only seeds the database on first start, so on a running
+instance add it in the UI: **Admin Settings → External Tools → +**
+
+| Field | Value |
+|---|---|
+| Type | MCP (Streamable HTTP) |
+| URL | `http://hindsight.hindsight.svc.cluster.local:8888/mcp/deep/` |
+| Auth | Bearer, with the Hindsight API key from the password manager |
+| ID / Name | `hindsight-deep` / `Hindsight (Deep)` |
+| Function name filter | `recall,reflect,retain,list_mental_models,get_mental_model,search_knowledge_base,get_knowledge_page` |
+| Access | leave **empty** (no groups) |
+
+- **Empty access = admin-only.** Open WebUI treats a connection with no access grants
+  as private to admins, so family accounts can never call the `deep` bank.
+- **The filter list is the safety line.** Hindsight's MCP server also exposes
+  `delete_bank`, `clear_memories`, `delete_document` and bank-config tools; only the
+  allowlisted names reach the model.
+- Then enable the tool server on the models you use (Workspace → Models → Tools).
+
+## Privacy: the `deep` bank is admin-only
+
+`HINDSIGHT_BANK=deep` is the admin's personal memory. The filter's `admin_only` valve
+(default **on**) skips recall and retain for any non-admin user, so a family chat
+never reads from or writes into it, even if the filter is enabled globally.
+Family memory lives in the separate `family` bank, used by hermes-family.
+
 ## How it talks to Hindsight
 
 In-cluster service, no NodePort:

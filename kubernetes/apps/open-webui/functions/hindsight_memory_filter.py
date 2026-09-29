@@ -30,6 +30,11 @@ class Filter:
         enabled: bool = Field(
             default=True, description="Master switch for this filter."
         )
+        admin_only: bool = Field(
+            default=True,
+            description="Only recall/retain for admin users. The bank holds the admin's "
+            "personal memory, so other accounts (family) must never read or write it.",
+        )
         base_url: str = Field(
             default=os.getenv(
                 "HINDSIGHT_URL", "http://hindsight.hindsight.svc.cluster.local:8888"
@@ -78,6 +83,9 @@ class Filter:
         base = self.valves.base_url.rstrip("/")
         return f"{base}/v1/default/banks/{self.valves.bank}{suffix}"
 
+    def _user_allowed(self, user: Optional[dict]) -> bool:
+        return not self.valves.admin_only or (user or {}).get("role") == "admin"
+
     @staticmethod
     def _last_role(messages: list, role: str) -> str:
         for m in reversed(messages or []):
@@ -113,6 +121,8 @@ class Filter:
         __user__: Optional[dict] = None,
     ) -> dict:
         if not (self.valves.enabled and self.valves.recall_enabled):
+            return body
+        if not self._user_allowed(__user__):
             return body
 
         messages = body.get("messages") or []
@@ -187,6 +197,8 @@ class Filter:
         __user__: Optional[dict] = None,
     ) -> dict:
         if not (self.valves.enabled and self.valves.retain_enabled):
+            return body
+        if not self._user_allowed(__user__):
             return body
 
         messages = body.get("messages") or []
