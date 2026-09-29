@@ -52,12 +52,14 @@ spec:
             - { name: HINDSIGHT_API_LLM_API_KEY,     value: "ollama-unused" }
             - { name: HINDSIGHT_API_LLM_STRICT_SCHEMA, value: "true" }
             - { name: HINDSIGHT_API_LLM_TEMPERATURE, value: "0.1" }
-            # Must equal the .84 Ollama server default (OLLAMA_CONTEXT_LENGTH=65536).
-            # Ollama keys a loaded model by context size, and Hindsight applies this
-            # to reflect's native (non-tool) calls too, while its /v1 tool calls always
-            # get the server default. A mismatch reloaded the 35B between every reflect
-            # round (160s+ calls, wall-clock timeouts) and truncated 30k-token prompts.
-            - { name: HINDSIGHT_API_LLM_OLLAMA_NUM_CTX, value: "65536" }
+            # HINDSIGHT_API_LLM_OLLAMA_NUM_CTX deliberately unset (was 65536 until
+            # 2026-09-29). It is global: Hindsight sent it to both models on the native
+            # path, while reflect's /v1 tool calls always get the server default, so it
+            # had to equal OLLAMA_CONTEXT_LENGTH or the 35B reloaded between rounds. Unset,
+            # every call gets the model's own default, which is consistent per model:
+            # qwen3.6 = server default 262,144; qwen3:4b-instruct = 32,768 pinned in its
+            # Modelfile (largest retain/consolidation prompt seen: 17.7k tokens). At 65,536
+            # the 4B loaded at 24.2 GB. See infrastructure/ollama-host/README.md.
             # --- LLM: reflect + mental-model refresh (refresh falls back to these) ---
             # Reflect is a tool-calling agent loop; qwen3:4b-instruct emits garbled
             # tool calls (ReflectToolCallError), so every reflect/mental model failed.
@@ -77,7 +79,9 @@ spec:
             # tool rounds ~180s + 2 serial map calls ~730s + reduce ~100s = ~1010s.
             # Mental-model cron slots are 35 min apart (06:00-08:55 UTC) to fit this.
             - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "1800" }
-            # Size reflect's working context to the 65,536-token model window. The default
+            # Sized for the old 65,536-token window; kept after the window went to 262,144
+            # (2026-09-29) because qwen3.6 re-prefills every round, so a bigger budget
+            # slows every reflect. It now only bounds speed, not truncation. The default
             # (100000) makes split-synthesis map chunks of 0.8x = 80k tokens, so a map
             # prompt filled the window and generation hit its end (done_reason "length" ->
             # OutputTooLongError). Rule from a similar Talos/Flux deployment
