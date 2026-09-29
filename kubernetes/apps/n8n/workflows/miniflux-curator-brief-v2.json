@@ -220,12 +220,12 @@
         "url": "http://192.168.4.84:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, think: false, messages: $json.messages, options: { temperature: 0.3, num_ctx: 32768 } } }}",
+        "jsonBody": "={{ { model: 'qwen3.6:35b-a3b', stream: false, think: false, messages: $json.messages, options: { temperature: 0.3, num_ctx: 262144 } } }}",
         "options": {
           "batching": {
             "batch": {
               "batchSize": 2,
-              "batchInterval": 20000
+              "batchInterval": 0
             }
           },
           "timeout": 300000
@@ -282,7 +282,7 @@
         "url": "http://192.168.4.84:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"qwen3.6:35b-a3b\",\n  \"stream\": false,\n  \"think\": false,\n  \"keep_alive\": 1800,\n  \"options\": { \"temperature\": 0.3, \"num_ctx\": 16384 },\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
+        "jsonBody": "={\n  \"model\": \"qwen3.6:35b-a3b\",\n  \"stream\": false,\n  \"think\": false,\n  \"keep_alive\": 1800,\n  \"options\": { \"temperature\": 0.3, \"num_ctx\": 262144 },\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
         "options": {
           "timeout": 300000
         }
