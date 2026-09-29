@@ -10,6 +10,12 @@ creation_rules:
     age: "age19gqzu544u299sfdfnsrxxgz6dw7vl7rk8p50mazkhvdwffwlf3msdr4q0t"
     encrypted_regex: "^(data|stringData)$"
 
+  # Hindsight bank templates — personal context (missions, directives, career).
+  # Encrypt EVERY value; JSON keys stay readable but are only schema field names.
+  # Files: apps/hindsight/bank-templates/*.enc.json
+  - path_regex: "apps/hindsight/bank-templates/.*\\.enc\\.json$"
+    age: "age19gqzu544u299sfdfnsrxxgz6dw7vl7rk8p50mazkhvdwffwlf3msdr4q0t"
+
   # Default — any other .enc.yaml in the kubernetes/ tree (app credentials, etc.)
   - path_regex: ".*\\.enc\\.yaml$"
     age: "age19gqzu544u299sfdfnsrxxgz6dw7vl7rk8p50mazkhvdwffwlf3msdr4q0t"
