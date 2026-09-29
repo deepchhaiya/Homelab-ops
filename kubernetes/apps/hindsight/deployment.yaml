@@ -94,6 +94,15 @@ spec:
             # slot ~20 min. Hindsight's local-LLM guidance: retries rarely help a slow
             # box; the worker still retries the whole task on failure.
             - { name: HINDSIGHT_API_REFLECT_LLM_MAX_RETRIES,      value: "2" }
+            # Sampling for reflect's native (non-tool) calls: split-synthesis map calls,
+            # reduce and final synthesis. Hindsight hard-codes map temperature 0.0; on
+            # qwen3.6 that greedy decoding cycled the claim list (2026-09-29: 32 distinct
+            # claims then repeats, 58% unique lines, runs to OutputTooLongError). These
+            # options are merged over Hindsight's own on the native path; the /v1 tool-call
+            # rounds ignore them. Qwen3 non-thinking recommendation: 0.7 / 0.8 / 20.
+            # Penalties deliberately untouched (Modelfile presence_penalty 1.5 still applies).
+            - name: HINDSIGHT_API_REFLECT_LLM_EXTRA_BODY
+              value: '{"options":{"temperature":0.7,"top_p":0.8,"top_k":20}}'
             # --- Recall speed. Reranking runs on this pod's CPU (cross-encoder); the
             # default 300 candidates per recall took ~110s on 3 cores inside reflect.
             # Reflect only uses the top ~10-20 results, so 100 keeps quality.
