@@ -74,6 +74,10 @@ spec:
             # Whole-reflect wall clock (default 300s). Up to 10 tool rounds on a shared
             # local 35B; mental model refreshes run in the background, so allow 15 min.
             - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "900" }
+            # --- Recall speed. Reranking runs on this pod's CPU (cross-encoder); the
+            # default 300 candidates per recall took ~110s on 3 cores inside reflect.
+            # Reflect only uses the top ~10-20 results, so 100 keeps quality.
+            - { name: HINDSIGHT_API_RERANKER_MAX_CANDIDATES,      value: "100" }
             # Stable worker id (Deployment pod name changes on recreate -> else
             # in-flight consolidation tasks can get orphaned). Single replica.
             - { name: HINDSIGHT_API_WORKER_ID, value: "hindsight-0" }
@@ -116,7 +120,9 @@ spec:
             failureThreshold: 6
           resources:
             requests: { cpu: "500m", memory: "1Gi" }
-            limits:   { cpu: "3000m", memory: "3Gi" }
+            # CPU-bound: embeddings + reranker run in-pod. Above the VM's current 4 vCPUs
+            # on purpose, so raising VM 402's cores takes effect with no manifest change.
+            limits:   { cpu: "6000m", memory: "3Gi" }
       volumes:
         - name: data
           persistentVolumeClaim:
