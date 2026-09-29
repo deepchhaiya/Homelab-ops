@@ -53,6 +53,19 @@ spec:
             - { name: HINDSIGHT_API_LLM_STRICT_SCHEMA, value: "true" }
             - { name: HINDSIGHT_API_LLM_TEMPERATURE, value: "0.1" }
             - { name: HINDSIGHT_API_LLM_OLLAMA_NUM_CTX, value: "16384" }
+            # --- LLM: reflect + mental-model refresh (refresh falls back to these) ---
+            # Reflect is a tool-calling agent loop; qwen3:4b-instruct emits garbled
+            # tool calls (ReflectToolCallError), so every reflect/mental model failed.
+            # qwen3.6:35b-a3b makes clean tool calls and is already resident for the
+            # curator brief. reasoning_effort "none" = Ollama think:false over /v1
+            # (0 reasoning tokens, ~12s/call when the host is idle).
+            - { name: HINDSIGHT_API_REFLECT_LLM_PROVIDER,         value: "ollama" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_MODEL,            value: "qwen3.6:35b-a3b" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_BASE_URL,         value: "http://192.168.4.84:11434" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_API_KEY,          value: "ollama-unused" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT, value: "none" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_MAX_CONCURRENT,   value: "1" }
+            - { name: HINDSIGHT_API_REFLECT_LLM_TIMEOUT,          value: "300" }
             # Stable worker id (Deployment pod name changes on recreate -> else
             # in-flight consolidation tasks can get orphaned). Single replica.
             - { name: HINDSIGHT_API_WORKER_ID, value: "hindsight-0" }

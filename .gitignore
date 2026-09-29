@@ -34,3 +34,7 @@ cluster.env
 infrastructure/observability-lxc/grafana/provisioning/dashboards/json/node-exporter-full.json
 infrastructure/observability-lxc/grafana/provisioning/dashboards/json/loki-logs.json
 infrastructure/observability-lxc/grafana/provisioning/dashboards/json/*.ct405-bak
+
+# Hindsight bank templates hold personal context — only the SOPS-encrypted copy is committed
+kubernetes/apps/hindsight/bank-templates/*.json
+!kubernetes/apps/hindsight/bank-templates/*.enc.json
