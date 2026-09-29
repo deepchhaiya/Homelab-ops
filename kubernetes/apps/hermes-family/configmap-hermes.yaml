@@ -8,12 +8,13 @@ data:
   # After that Hermes owns it (mid-session /model switches mutate this file).
   config.yaml: |
     # ───────────────────────────────────────────────────────────────────────────
-    # Primary inference — Gemma 4 e4b on Evo-X2 Ollama (multimodal, friendly)
-    # Smaller + faster than admin Hermes's qwen3.6:35b-a3b — appropriate for
-    # casual family use, leaves the heavy model free for admin work.
+    # Primary inference — qwen3.6:35b-a3b on Evo-X2 Ollama, same as admin Hermes
+    # (gemma4:e4b until 2026-09-29; dropped as little-used, which also frees a
+    # model slot). qwen3.6 is always resident for Hindsight and the curator brief,
+    # so family chats never wait for a model load.
     # ───────────────────────────────────────────────────────────────────────────
     model:
-      default: gemma4:e4b
+      default: qwen3.6:35b-a3b
       provider: custom
       base_url: http://192.168.4.84:11434/v1
       context_length: 64000

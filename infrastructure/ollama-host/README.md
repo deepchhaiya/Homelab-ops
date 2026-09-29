@@ -8,7 +8,7 @@ Ollama's bundled ROCm libs reliably detect the gfx1151 iGPU on the **Proxmox hos
 - GPU memory: **71.3 GiB** usable (UMA 48 GB + GTT carveout)
 - Generation rate: **44.3 tok/s** on `qwen3.6:35b-a3b` (Q4 MoE, 3.8 B active params/token)
 - Prompt eval: 289.7 tok/s
-- Cold model load: ~2.6 s (after that, `KEEP_ALIVE=24h` keeps it hot)
+- Cold model load: ~2.6 s (after that, `OLLAMA_KEEP_ALIVE=3h` keeps it hot)
 
 ---
 
@@ -56,23 +56,48 @@ This adds **one** targeted rule: `tcp dport 11434` accepted only from `192.168.4
 
 ## Models pulled
 
-| Model | Size on disk | VRAM (loaded) | Use |
-|---|---|---|---|
-| `qwen3.6:35b-a3b` | 23 GB | ~26 GB | Primary — chat, tool calling, code (3.8 B active params) |
-| `qwen3-embedding:0.6b` | 639 MB | ~1.5 GB | Embeddings (was mem0's embedder; Hindsight uses its own in-pod bge-small) |
+| Model | Size on disk | Context | VRAM (loaded) | Use |
+|---|---|---|---|---|
+| `qwen3.6:35b-a3b` | 22 GB | 262,144 (server default) | 22.5 GB | Hermes admin + family, Hindsight reflect/mental models, curator brief, Open WebUI |
+| `qwen3.5:9b` | 6.6 GB | 8,192 (Modelfile pin) | ~8 GB | Curator scoring, email summary, weekly digest (sends 16,384) |
+| `qwen3:4b-instruct` | 2.5 GB | 32,768 (Modelfile pin) | ~7.5 GB | Hindsight retain + consolidation (largest prompt seen: 17.7k tokens) |
+| `qwen3-embedding:0.6b` | 639 MB | - | ~1.5 GB | No current consumer (was mem0's embedder; Hindsight embeds in-pod) |
 
-**Context window:** the override sets `OLLAMA_CONTEXT_LENGTH=65536` (default is ~4K,
-which truncates large prompts). Hermes Agent needs ≥64K — at 32K its responses were
-cut off with `finish_reason='length'` (raised 2026-09-13). This is required for agentic coding tools — see
+Removed 2026-09-29: `gemma4:e4b` (family Hermes moved to qwen3.6) and `gpt-oss:20b`
+(benchmarked for the curator: 70% action agreement with production, 0/13 brief
+format compliance).
+
+### Per-model context
+
+Ollama keys a loaded model by its context size: a request with a different
+`num_ctx` unloads and reloads the model. The server default (262,144) suits
+qwen3.6, whose KV cache is tiny, but would be expensive for the dense models,
+where `OLLAMA_NUM_PARALLEL` also multiplies it. Those are pinned to what their
+callers send, so a caller that omits `num_ctx` gets the same loaded instance:
+
+```bash
+pin() { printf 'FROM %s\nPARAMETER num_ctx %s\n' "$1" "$2" > /tmp/mf && ollama create "$1" -f /tmp/mf; }
+pin qwen3:4b-instruct 32768
+pin qwen3.5:9b 8192
+ollama show qwen3:4b-instruct --parameters   # expect num_ctx 32768
+```
+
+Re-run after any `ollama pull` of these models; a pull replaces the manifest and
+drops the pin. Check what is loaded with `curl -s localhost:11434/api/ps` (the
+`context_length` field).
+
+Hermes Agent needs >=64K (at 32K its responses were cut off with
+`finish_reason='length'`), and agentic coding tools need a large window too, see
 [`docs/vscode-ai-agent-setup.md`](../../docs/vscode-ai-agent-setup.md) for using
-`qwen3.6:35b-a3b` as a **Claude-Code-style agent inside VS Code** (via the Cline
-extension → `http://192.168.4.84:11434`). Verified: OpenAI-compatible chat + tool
-calling both work.
+`qwen3.6:35b-a3b` as a Claude-Code-style agent inside VS Code (via the Cline
+extension to `http://192.168.4.84:11434`).
 
 Pull command:
 ```bash
 ollama pull qwen3.6:35b-a3b
-ollama pull qwen3-embedding:0.6b
+ollama pull qwen3.5:9b
+ollama pull qwen3:4b-instruct
+# then re-apply the context pins above
 ```
 
 ---

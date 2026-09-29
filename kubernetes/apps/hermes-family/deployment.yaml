@@ -51,7 +51,7 @@ spec:
       containers:
         # ───────────────────────────────────────────────────────────────────
         # Hermes Agent gateway for family use.
-        # - Default model: gemma4:e4b (multimodal, friendly)
+        # - Default model: qwen3.6:35b-a3b (vision + tools; gemma4:e4b until 2026-09-29)
         # - mem0 user_id = "family" (memory isolated from admin Hermes user "deep")
         # - No SSH key, no Gotify, no Proxmox/Grafana/Beszel/HA tokens
         # - No system-administrator skill

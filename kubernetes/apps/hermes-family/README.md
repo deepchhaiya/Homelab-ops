@@ -11,7 +11,7 @@ Hermes v0.16 doesn't yet support per-user memory isolation within a single proce
 | Aspect | hermes-agent (admin) | hermes-family |
 |---|---|---|
 | Namespace | `hermes-agent` | `hermes-family` |
-| Default model | `qwen3.6:35b-a3b` (heavy reasoning) | `gemma4:e4b` (multimodal, light, friendly) |
+| Default model | `qwen3.6:35b-a3b` (heavy reasoning) | `qwen3.6:35b-a3b` (same model; gemma4:e4b until 2026-09-29) |
 | Hindsight bank | `deep` | `family` |
 | Skills loaded | `system-administrator` (SSH, repo, git, observability) | None (plain chat + web search + image gen via toolsets) |
 | Resources | 8 GiB RAM ceiling | 4 GiB RAM ceiling |
@@ -25,7 +25,7 @@ Hermes v0.16 doesn't yet support per-user memory isolation within a single proce
 ## What family users CAN do
 
 - General chat (questions, writing help, brainstorming, recipes, etc.)
-- Vision queries (send an image, ask about it — gemma4:e4b is multimodal)
+- Vision queries (send an image, ask about it — qwen3.6 has vision)
 - Web search (via SearXNG — same instance the admin Hermes uses, no extra cost)
 - Image generation (Gemini image API via fallback provider — free tier)
 - Memory: shared family pool. What one family member tells Hermes ("we're vegetarian", "Saturday is laundry day") is accessible to others.
