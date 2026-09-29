@@ -70,10 +70,13 @@ spec:
             - { name: HINDSIGHT_API_REFLECT_LLM_API_KEY,          value: "ollama-unused" }
             - { name: HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT, value: "none" }
             - { name: HINDSIGHT_API_REFLECT_LLM_MAX_CONCURRENT,   value: "1" }
-            - { name: HINDSIGHT_API_REFLECT_LLM_TIMEOUT,          value: "300" }
-            # Whole-reflect wall clock (default 300s). Up to 10 tool rounds on a shared
-            # local 35B; mental model refreshes run in the background, so allow 15 min.
-            - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "900" }
+            # Per call. A split-synthesis map call on a ~47k-token chunk: ~65s prefill +
+            # up to 16384 tokens at ~55 tok/s (~300s) = ~365s.
+            - { name: HINDSIGHT_API_REFLECT_LLM_TIMEOUT,          value: "600" }
+            # Whole-reflect wall clock (default 300s). Worst case measured 2026-09-29:
+            # tool rounds ~180s + 2 serial map calls ~730s + reduce ~100s = ~1010s.
+            # Mental-model cron slots are 35 min apart (06:00-08:55 UTC) to fit this.
+            - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "1800" }
             # Size reflect's working context to the 65,536-token model window. The default
             # (100000) makes split-synthesis map chunks of 0.8x = 80k tokens, so a map
             # prompt filled the window and generation hit its end (done_reason "length" ->
@@ -82,9 +85,11 @@ spec:
             # fit the window: 48000*1.1 + 8192 = ~61k < 65,536. Smaller prompts also cut
             # the full re-prefill qwen3.6 (hybrid) pays every round (hindsight#3865).
             - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "48000" }
-            # Explicit output cap (default: none). Above the largest mental model
-            # max_tokens (4096) so a legitimate answer is never cut (hindsight#4463).
-            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "8192" }
+            # Explicit output cap (default: none). Split-synthesis map calls are told to
+            # list EVERY relevant claim with memory ids; on a 90-observation chunk both
+            # maps hit 8192 exactly (OutputTooLongError, 2026-09-29). 16384 fits the
+            # window: largest measured map input 46.7k + 16.4k = 63.1k < 65,536.
+            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "16384" }
             # Default is 4 attempts x 300s: one slow call could hold the single reflect
             # slot ~20 min. Hindsight's local-LLM guidance: retries rarely help a slow
             # box; the worker still retries the whole task on failure.
