@@ -52,7 +52,12 @@ spec:
             - { name: HINDSIGHT_API_LLM_API_KEY,     value: "ollama-unused" }
             - { name: HINDSIGHT_API_LLM_STRICT_SCHEMA, value: "true" }
             - { name: HINDSIGHT_API_LLM_TEMPERATURE, value: "0.1" }
-            - { name: HINDSIGHT_API_LLM_OLLAMA_NUM_CTX, value: "16384" }
+            # Must equal the .84 Ollama server default (OLLAMA_CONTEXT_LENGTH=65536).
+            # Ollama keys a loaded model by context size, and Hindsight applies this
+            # to reflect's native (non-tool) calls too, while its /v1 tool calls always
+            # get the server default. A mismatch reloaded the 35B between every reflect
+            # round (160s+ calls, wall-clock timeouts) and truncated 30k-token prompts.
+            - { name: HINDSIGHT_API_LLM_OLLAMA_NUM_CTX, value: "65536" }
             # --- LLM: reflect + mental-model refresh (refresh falls back to these) ---
             # Reflect is a tool-calling agent loop; qwen3:4b-instruct emits garbled
             # tool calls (ReflectToolCallError), so every reflect/mental model failed.
@@ -66,6 +71,9 @@ spec:
             - { name: HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT, value: "none" }
             - { name: HINDSIGHT_API_REFLECT_LLM_MAX_CONCURRENT,   value: "1" }
             - { name: HINDSIGHT_API_REFLECT_LLM_TIMEOUT,          value: "300" }
+            # Whole-reflect wall clock (default 300s). Up to 10 tool rounds on a shared
+            # local 35B; mental model refreshes run in the background, so allow 15 min.
+            - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "900" }
             # Stable worker id (Deployment pod name changes on recreate -> else
             # in-flight consolidation tasks can get orphaned). Single replica.
             - { name: HINDSIGHT_API_WORKER_ID, value: "hindsight-0" }
