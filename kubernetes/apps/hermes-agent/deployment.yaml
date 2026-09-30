@@ -150,7 +150,6 @@ spec:
             - name: LOKI_URL
               value: "http://192.168.4.66:3100"
             # Credentials — sourced from the hermes-credentials Secret (SOPS-encrypted in repo)
-            - { name: ANTHROPIC_API_KEY,    valueFrom: { secretKeyRef: { name: hermes-credentials, key: ANTHROPIC_API_KEY,    optional: true } } }
             - { name: GEMINI_API_KEY,       valueFrom: { secretKeyRef: { name: hermes-credentials, key: GEMINI_API_KEY,       optional: true } } }
             - { name: HASS_TOKEN,           valueFrom: { secretKeyRef: { name: hermes-credentials, key: HASS_TOKEN,           optional: true } } }
             - { name: HASS_URL,             value: "http://192.168.4.13:8123" }

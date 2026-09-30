@@ -20,19 +20,21 @@ data:
       context_length: 64000
 
     # ───────────────────────────────────────────────────────────────────────────
-    # Fallback chain — Gemini Flash (free tier) catches errors / outages.
+    # Fallback chain — Gemini Flash catches errors / outages. gemini-2.5-flash
+    # returns 404 "no longer available to new users" (checked 2026-09-30).
     # ───────────────────────────────────────────────────────────────────────────
     fallback_providers:
       - provider: gemini
-        model: gemini-2.5-flash
+        model: gemini-3.7-flash
 
     # ───────────────────────────────────────────────────────────────────────────
     # Auxiliary — small models for compression / vision sub-tasks.
     # ───────────────────────────────────────────────────────────────────────────
+    # Compression runs often, so it uses the cheapest Gemini ($0.30/M input).
     auxiliary:
       compression:
         provider: gemini
-        model: gemini-2.5-flash
+        model: gemini-3.5-flash-lite
 
     # ───────────────────────────────────────────────────────────────────────────
     # Platforms — ALL OFF except CLI (Open WebUI is the family front-end).
