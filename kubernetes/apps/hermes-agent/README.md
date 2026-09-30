@@ -22,8 +22,11 @@
 | Slot | Model | How it's reached |
 |---|---|---|
 | Primary | `qwen3.6:35b-a3b` (Q4 MoE) | Ollama on the Evo-X2 **host** at `http://192.168.4.84:11434/v1` (Phase 22a — not in K8s) |
-| Fallback 1 (on error) | `gemini-2.5-flash` | Google AI Studio API (`GEMINI_API_KEY`) |
-| Fallback 2 (on still-error) | `claude-sonnet-4-6` | Anthropic API (`ANTHROPIC_API_KEY`) |
+| Fallback (on error) | `gemini-3.7-flash` | Gemini API (`GEMINI_API_KEY`) |
+| Compression (auxiliary) | `gemini-3.5-flash-lite` | Gemini API (`GEMINI_API_KEY`) |
+
+No paid-Claude fallback: Claude Code is the only paid agent, and free agents must not fall
+back to it. `gemini-2.5-flash` was dropped on 2026-09-30 (the API returns 404 for it).
 
 In-session mid-conversation overrides via `/model <provider>:<model>` — see Hermes docs.
 
@@ -61,8 +64,7 @@ cp secret.example.yaml secrets.yaml
 | Set this | To unlock |
 |---|---|
 | `API_SERVER_KEY` | **required** — Hermes refuses to bind 0.0.0.0 without it; same value as Open WebUI's `OPENAI_API_KEY` |
-| `GEMINI_API_KEY` | fallback chain step 1 |
-| `ANTHROPIC_API_KEY` | fallback chain step 2 |
+| `GEMINI_API_KEY` | Gemini fallback + compression |
 | `HASS_TOKEN` | `ha_*` tools (4) — list entities, get/set state, call services |
 | `PROXMOX_TOKEN_ID/VALUE` | `proxmox_status.py` |
 | `BESZEL_USER/PASSWORD` | `beszel_query.py` |

@@ -21,20 +21,22 @@ data:
     # ───────────────────────────────────────────────────────────────────────────
     # Fallback chain — only fires on errors from primary (429, 5xx, auth, timeout)
     # Tried in order; one-shot per session. Manual override mid-session via /model.
+    # gemini-2.5-flash returns 404 "no longer available to new users" (checked
+    # 2026-09-30), so it was replaced. The Anthropic fallback was removed: it never
+    # had a key, and free agents must not fall back to a paid Claude model.
     # ───────────────────────────────────────────────────────────────────────────
     fallback_providers:
       - provider: gemini
-        model: gemini-2.5-flash
-      - provider: anthropic
-        model: claude-sonnet-4-6
+        model: gemini-3.7-flash
 
     # ───────────────────────────────────────────────────────────────────────────
     # Auxiliary models — small models for vision / compression / web extract
     # ───────────────────────────────────────────────────────────────────────────
+    # Compression runs often, so it uses the cheapest Gemini ($0.30/M input).
     auxiliary:
       compression:
         provider: gemini
-        model: gemini-2.5-flash
+        model: gemini-3.5-flash-lite
 
     # ───────────────────────────────────────────────────────────────────────────
     # Messaging platforms (gateways Hermes listens on)
