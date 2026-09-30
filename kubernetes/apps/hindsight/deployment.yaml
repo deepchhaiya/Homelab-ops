@@ -79,20 +79,18 @@ spec:
             # tool rounds ~180s + 2 serial map calls ~730s + reduce ~100s = ~1010s.
             # Mental-model cron slots are 35 min apart (06:00-08:55 UTC) to fit this.
             - { name: HINDSIGHT_API_REFLECT_WALL_TIMEOUT,         value: "1800" }
-            # Reflect's working budget. When retrieved evidence exceeds it, Hindsight splits
-            # it into chunks and runs "list every claim" map calls whose output grows with
-            # input; at 48000 (sized for the old 65,536 window) even the narrow mental
-            # models split (~70k retrieved) and 39 of 66 map calls hit the output cap.
-            # 100000 (Hindsight's default) holds that evidence in one prompt, so there is
-            # no split. Fits the 262,144 window: 100000 x 1.1 tokenizer slack + 8192
-            # output = ~118k (bluevulpine/flux-talos#1912 rule). Cost: qwen3.6 re-prefills
-            # every round (hindsight#3865), ~100s per round at ~940 tok/s.
-            - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "100000" }
-            # Explicit output cap (default: none). Kept at 8192: split-synthesis map calls
-            # grow with their input (every claim + provenance), so broad questions ran to
-            # 8192 and then 16384 alike (2026-09-29). Fix was design-level: only narrow
-            # mental models that never split; this cap just bounds a runaway to ~2.5 min.
-            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "8192" }
+            # Reflect's working budget. Over it, Hindsight splits the evidence and runs one
+            # "list every claim" map call per chunk; map output is ~15-20% of its input.
+            # 100000 (PR #18) did not avoid the split: reflect just retrieved more (~129k)
+            # and a 91k map chunk overflowed. Back to 48000 so chunks stay ~40k and need
+            # ~6-8k output, which the 16384 cap below holds (2026-09-29 test).
+            - { name: HINDSIGHT_API_REFLECT_MAX_CONTEXT_TOKENS,   value: "48000" }
+            # Output cap (default: none). 8192 sat right at what ~40k map chunks legitimately
+            # need (6-8k), so most refresh attempts had one map call at exactly 8192 and
+            # failed (05:37-09:06 UTC 2026-09-29). 16384 was tried once before, but only
+            # before the sampling fix below, when map calls looped and ran to any cap.
+            # Worst case ~5 min per map call at ~55 tok/s, inside REFLECT_LLM_TIMEOUT.
+            - { name: HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS, value: "16384" }
             # Default is 4 attempts x 300s: one slow call could hold the single reflect
             # slot ~20 min. Hindsight's local-LLM guidance: retries rarely help a slow
             # box; the worker still retries the whole task on failure.
