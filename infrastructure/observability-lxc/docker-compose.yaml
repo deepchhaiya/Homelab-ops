@@ -7,7 +7,7 @@ name: observability   # pin project name so named volumes stay stable regardless
 
 services:
   victoriametrics:
-    image: victoriametrics/victoria-metrics:v1.143.0
+    image: victoriametrics/victoria-metrics:v1.153.0
     container_name: victoriametrics
     restart: unless-stopped
     ports:
@@ -27,7 +27,7 @@ services:
           memory: 1024M
 
   loki:
-    image: grafana/loki:3.7.2
+    image: grafana/loki:3.7.8
     container_name: loki
     restart: unless-stopped
     user: "0"   # custom data path /data/loki isn't pre-owned in the image; run as root to write it
@@ -43,7 +43,7 @@ services:
           memory: 1536M
 
   grafana:
-    image: grafana/grafana:13.0.1
+    image: grafana/grafana:13.2.3
     container_name: grafana
     restart: unless-stopped
     ports:
@@ -69,7 +69,7 @@ services:
           memory: 512M
 
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.1
     container_name: node-exporter
     restart: unless-stopped
     ports:
@@ -85,7 +85,7 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   alloy:
-    image: grafana/alloy:v1.16.1
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     restart: unless-stopped
     user: root   # needs to read /var/run/docker.sock (root:docker, mode 660)

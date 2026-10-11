@@ -1,7 +1,7 @@
 services:
   # Grafana Alloy — ships this LXC's Docker container logs to central Loki on CT405.
   alloy:
-    image: grafana/alloy:v1.17.1
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     restart: unless-stopped
     command:
@@ -18,7 +18,7 @@ services:
       - "12345:12345"  # Alloy UI (debug)
 
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.1
     container_name: node-exporter
     restart: unless-stopped
     ports:
@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
 
   gotify:
-    image: gotify/server:2.9.1
+    image: gotify/server:3.1.1
     container_name: gotify
     environment:
       - TZ=America/Chicago
@@ -68,7 +68,7 @@ services:
     restart: unless-stopped
 
   nginx-proxy-manager:
-    image: jc21/nginx-proxy-manager:latest
+    image: jc21/nginx-proxy-manager:2.16.0
     container_name: npm
     # Docker Hub :latest — force WUD digest watching (see vaultwarden note).
     labels:
@@ -108,7 +108,7 @@ services:
   #   restart: unless-stopped
 
   vaultwarden:
-    image: vaultwarden/server:latest
+    image: vaultwarden/server:1.37.4
     container_name: vaultwarden
     # WUD does not auto-watch digests for Docker Hub :latest images (only ghcr),
     # so it silently missed the 1.36->1.37 update. Force digest watching so WUD
