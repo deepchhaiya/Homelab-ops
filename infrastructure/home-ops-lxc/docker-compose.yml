@@ -171,4 +171,8 @@ services:
     environment:
       - TZ=America/Chicago
       - WUD_WATCHER_LOCAL_WATCHBYDEFAULT=true
+      # WUD 9+ refuses to start without an admin (anonymous access removed).
+      # Values come from .env (SOPS: .env.enc.yaml); Homepage's widget uses the same login.
+      - WUD_AUTH_ADMIN_USER=${WUD_ADMIN_USER}
+      - WUD_AUTH_ADMIN_PASSWORD=${WUD_ADMIN_PASSWORD}
     restart: unless-stopped

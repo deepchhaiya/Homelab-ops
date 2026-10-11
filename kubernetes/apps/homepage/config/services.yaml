@@ -104,6 +104,8 @@
         widget:
           type: whatsupdocker
           url: http://192.168.4.12:3003
+          username: "{{HOMEPAGE_VAR_WUD_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_WUD_PASSWORD}}"
     - Updates — Home (.13):
         icon: mdi-package-up
         href: http://192.168.4.13:3003
@@ -111,3 +113,5 @@
         widget:
           type: whatsupdocker
           url: http://192.168.4.13:3003
+          username: "{{HOMEPAGE_VAR_WUD_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_WUD_PASSWORD}}"
