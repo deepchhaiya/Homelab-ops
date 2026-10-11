@@ -5,7 +5,7 @@ networks:
 services:
   # Grafana Alloy — ships this LXC's Docker container logs to central Loki on CT405.
   alloy:
-    image: grafana/alloy:v1.17.1
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     restart: unless-stopped
     command:
@@ -21,7 +21,7 @@ services:
       - "12345:12345"  # Alloy UI (debug)
 
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.1
     container_name: node-exporter
     restart: unless-stopped
     ports:
@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
 
   immich-redis:
-    image: redis:7-alpine
+    image: valkey/valkey:9
     container_name: immich-redis
     # WUD default sorting picks the junk tag "32bit-stretch" as "newer" than
     # 7-alpine. Restrict the watch to real N[-.N]-alpine tags so the false
@@ -127,7 +127,7 @@ services:
     # compatibility at apps.nextcloud.com/api/v1/platform/<ver>/apps.json.
     # WUD still picks up 34.x patch builds via the digest; the include regex makes
     # it surface the next major tag instead of every point-release tag.
-    image: nextcloud:34-apache
+    image: nextcloud:35-apache
     container_name: nextcloud
     labels:
       - wud.watch.digest=true
@@ -171,7 +171,7 @@ services:
     restart: unless-stopped
 
   mariadb:
-    image: linuxserver/mariadb:latest
+    image: linuxserver/mariadb:11.8.8
     container_name: mariadb
     # Docker Hub :latest — WUD needs this to watch the digest.
     labels:
@@ -243,7 +243,7 @@ services:
   # MEDIA PLAYER (Jellyfin)
   # ============================================================
   jellyfin:
-    image: jellyfin/jellyfin:latest
+    image: jellyfin/jellyfin:12.2
     container_name: jellyfin
     # Docker Hub :latest — WUD needs this to watch the digest.
     labels:
@@ -342,4 +342,8 @@ services:
     environment:
       - TZ=America/Chicago
       - WUD_WATCHER_LOCAL_WATCHBYDEFAULT=true
+      # WUD 9+ refuses to start without an admin (anonymous access removed).
+      # Values come from .env (SOPS: .env.enc.yaml); Homepage's widget uses the same login.
+      - WUD_AUTH_ADMIN_USER=${WUD_ADMIN_USER}
+      - WUD_AUTH_ADMIN_PASSWORD=${WUD_ADMIN_PASSWORD}
     restart: unless-stopped

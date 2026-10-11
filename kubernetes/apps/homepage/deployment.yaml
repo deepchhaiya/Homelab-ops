@@ -39,6 +39,11 @@ spec:
             # NodePort 30000 on the rpi4 worker; add extra hosts/domains here.
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: "192.168.4.141:30000,ira-rpi4-talos-worker:30000,localhost:3000"
+          # HOMEPAGE_VAR_* secrets (WUD login for the whatsupdocker widgets).
+          # Referenced in services.yaml as {{HOMEPAGE_VAR_...}}. SOPS: secret.enc.yaml.
+          envFrom:
+            - secretRef:
+                name: homepage-secrets
           volumeMounts:
             - { name: config, mountPath: /app/config }
       volumes:

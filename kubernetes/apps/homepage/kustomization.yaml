@@ -8,6 +8,7 @@ resources:
   - rbac.yaml
   - deployment.yaml
   - service.yaml
+  - secret.enc.yaml
 
 # Config is generated (not a static ConfigMap) so kustomize appends a content
 # hash to the name. Any edit under config/ -> new hash -> new ConfigMap name ->
