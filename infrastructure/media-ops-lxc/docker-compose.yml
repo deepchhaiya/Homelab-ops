@@ -127,7 +127,7 @@ services:
     # compatibility at apps.nextcloud.com/api/v1/platform/<ver>/apps.json.
     # WUD still picks up 34.x patch builds via the digest; the include regex makes
     # it surface the next major tag instead of every point-release tag.
-    image: nextcloud:34-apache
+    image: nextcloud:35-apache
     container_name: nextcloud
     labels:
       - wud.watch.digest=true
