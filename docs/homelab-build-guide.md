@@ -92,6 +92,8 @@ sops --encrypt --in-place secret.yaml
 
 **Pitfall:** set `.gitignore` up **before** generating Talos configs. Those files contain the cluster CA and join tokens, and a public repo does not forget.
 
+**Pitfall — `.env` files are not YAML.** A Docker `.env` encrypted to `.env.enc.yaml` can match a `.*\.yaml$` creation rule whose `encrypted_regex` is `data|stringData`. A `.env` has neither key, so every value is committed in plaintext inside a file that looks encrypted. Always encrypt with `--input-type dotenv --output-type yaml` (as [`encrypt-secrets.ps1`](../infrastructure/encrypt-secrets.ps1) does) and check that every value starts with `ENC[` before committing.
+
 ---
 
 ## Stage 3 — Storage on the host, not in a guest
@@ -122,7 +124,7 @@ If the storage is USB-attached, harden the path before trusting it: disable auto
 **Goal:** two unprivileged Debian LXCs, with bulk storage bind-mounted in.
 
 ```bash
-pveam update && pveam download local debian-13-standard_13.0-1_amd64.tar.zst
+pveam update && pveam download local debian-13-standard_13.1-2_amd64.tar.zst   # `pveam available` lists current versions
 # create both CTs unprivileged, then in /etc/pve/lxc/<id>.conf:
 #   features: nesting=1
 #   mp0: /mnt/pvedas,mp=/mnt/das
@@ -131,9 +133,20 @@ pveam update && pveam download local debian-13-standard_13.0-1_amd64.tar.zst
 pct start 202 && pct exec 202 -- ls /mnt/das
 ```
 
-Inside each: `apt install -y docker.io docker-compose curl git`, then clone the repo and bring the stack up from the committed compose file.
+Inside each: `apt install -y docker.io docker-compose curl git`, then clone the repo and bring the stack up from the committed compose file:
 
-**Repo refs:** [`infrastructure/media-ops-lxc/`](../infrastructure/media-ops-lxc/) (CT 202 — Nextcloud, Immich, Jellyfin, Frigate) · [`infrastructure/home-ops-lxc/`](../infrastructure/home-ops-lxc/) (CT 203 — Home Assistant, NPM, Vaultwarden, Mosquitto, Gotify, UpSnap)
+```bash
+cd /root && git clone https://github.com/<you>/Homelab-ops.git
+cd Homelab-ops/infrastructure
+./decrypt-secrets.sh            # ONCE per LXC — prompts for the Age key, writes the gitignored .env
+cd media-ops-lxc && docker compose pull && docker compose up -d
+```
+
+The `.env` stays on the LXC across `git pull`, so day-to-day updates are just `git pull && docker compose up -d`. The encrypted copy in Git is the rebuild path — re-encrypt and commit it whenever a secret changes, or it silently drifts from the one actually running.
+
+GPU containers: use **numeric** GIDs in `group_add` (`44` video, `992` render — check yours with `ls -ln /dev/dri`), since the names may not exist in the image. If the device still shows as `nobody:nogroup` inside the container, install [`99-dri.rules`](../infrastructure/peladn-host/99-dri.rules) (`SUBSYSTEM=="drm", MODE="0666"`) on the **Proxmox host**.
+
+**Repo refs:** [`infrastructure/media-ops-lxc/`](../infrastructure/media-ops-lxc/) (CT 202 — Nextcloud, Immich, Jellyfin, Webtop) · [`infrastructure/home-ops-lxc/`](../infrastructure/home-ops-lxc/) (CT 203 — Home Assistant, NPM, Vaultwarden, Gotify, UpSnap, Obsidian LiveSync) · [`decrypt-secrets.sh`](../infrastructure/decrypt-secrets.sh)
 
 **Verify:** `docker ps` shows the stack; `docker exec jellyfin ls /dev/dri/` shows `renderD128`; every database path resolves to the container rootfs, **not** `/mnt/das`.
 
@@ -234,13 +247,21 @@ kubectl create secret generic sops-age -n flux-system --from-file=age.agekey=age
 
 **Goal:** real workloads, with state on local disk from day one.
 
+A fresh Talos cluster has **no storage class**, so every PVC sits in `Pending` until you add one. Install Rancher's local-path-provisioner and make it the default:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'   # Git Bash; PowerShell mangles the quotes
+kubectl get storageclass        # local-path (default)
+```
+
 Structure per app: `kubernetes/apps/<name>/` with `namespace.yaml`, manifests, `kustomization.yaml`; register it in [`kubernetes/apps/kustomization.yaml`](../kubernetes/apps/kustomization.yaml); encrypt any secret; push.
 
 Use `local-path` for every PVC that holds a database. Add NFS **only** for a workload that genuinely needs RWX from another node — in this lab exactly one does, and the export is served by the host that owns the disk.
 
 **Verify:** `kubectl get pvc -A` shows every database PVC on `local-path`; `kubectl get pods -A -o wide` shows pods where you intended.
 
-**Pitfall:** a `local-path` PVC pins its pod to one node forever. That is fine, but pin it *on purpose* with a hostname selector so the constraint is documented rather than discovered.
+**Pitfall:** a `local-path` PVC pins its pod to one node forever. Once the volume is created it carries node affinity, so the scheduler will only ever place that pod on the same node: if the node is down, the pod waits in `Pending` rather than starting empty somewhere else. A `tier` selector is therefore safe, but the tier label is no longer what decides placement. Use a hostname selector where you want that pin visible in the manifest (n8n's Postgres does this), and remember that the data is only as safe as that one node's disk, so it needs its own backup.
 
 ---
 
@@ -275,7 +296,7 @@ n8n → UpSnap API → WOL packet → Proxmox boots → Talos VM auto-starts →
 
 **Verify:** actually restore something. A backup job that has never been restored from is a hypothesis.
 
-**Pitfall:** if PBS is privileged, it must be **restored** privileged — the chunk store is owned by a real UID and restoring unprivileged shifts ownership and breaks the datastore. Also: because databases sit in container rootfs (Stage 3's rule), `vzdump` captures them, so a restore yields working services rather than empty shells.
+**Pitfall:** if PBS is privileged, it must be **restored** privileged — the chunk store is owned by a real UID and restoring unprivileged shifts ownership and breaks the datastore. Also: because databases sit in container rootfs (Stage 0's rule, applied in Stage 4), `vzdump` captures them, so a restore yields working services rather than empty shells.
 
 ---
 

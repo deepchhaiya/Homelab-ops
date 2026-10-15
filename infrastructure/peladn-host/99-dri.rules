@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-dri.rules — on the Peladn Proxmox HOST (not inside an LXC)
+#
+# Makes the Radeon 780M DRM devices (/dev/dri/card0, /dev/dri/renderD128) world
+# read/write so containers in the UNPRIVILEGED media LXC (CT 202) can use VAAPI.
+#
+# Why: in an unprivileged LXC the host's video/render GIDs cannot be mapped, so the
+# devices appear as 65534:65534 (nobody:nogroup) inside the container and
+# `group_add` in docker-compose does not help. Jellyfin (UID 1000), Immich and
+# Webtop then get "permission denied" and fall back to CPU.
+#
+# Acceptable here because only my own containers run on this host.
+#
+# Apply:  udevadm control --reload-rules && udevadm trigger
+# Verify: ls -l /dev/dri/   -> crw-rw-rw- on card0 and renderD128
+SUBSYSTEM=="drm", MODE="0666"

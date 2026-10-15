@@ -12,6 +12,7 @@ rebuild is reproducible. Apply these by hand after reinstalling the host.
 | `beszel-agent.service` | `/etc/systemd/system/` | Beszel monitoring agent (secrets redacted) |
 | `das-mount-watchdog.{sh,service,timer}` | `/usr/local/sbin/` + `/etc/systemd/system/` | Re-mounts the DAS + restarts nfs-server after a flap |
 | `99-das-usb-no-suspend.rules` | `/etc/udev/rules.d/` | Disables USB autosuspend on the DAS chain |
+| `99-dri.rules` | `/etc/udev/rules.d/` | Makes `/dev/dri/*` mode 0666 so the unprivileged media LXC (CT 202) can use the 780M for VAAPI |
 | `nextcloud-das-recover.sh` | `/usr/local/sbin/` | Nextcloud recovery after a DAS flap |
 | `backup-scripts/` | `/home/n8n-backup/` + timers | Talos/k8s/PBS backup jobs (see its README) |
 
@@ -40,4 +41,9 @@ $EDITOR /etc/systemd/system/beszel-agent.service   # set KEY= and TOKEN=
 systemctl daemon-reload && systemctl enable --now beszel-agent
 
 # 3. DAS watchdog + udev (see the individual files)
+
+# 4. GPU access for the unprivileged media LXC
+cp 99-dri.rules /etc/udev/rules.d/
+udevadm control --reload-rules && udevadm trigger
+ls -l /dev/dri/                                     # card0 + renderD128 should be crw-rw-rw-
 ```
