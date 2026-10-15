@@ -13,6 +13,7 @@ rebuild is reproducible. Apply these by hand after reinstalling the host.
 | `das-mount-watchdog.{sh,service,timer}` | `/usr/local/sbin/` + `/etc/systemd/system/` | Re-mounts the DAS + restarts nfs-server after a flap |
 | `99-das-usb-no-suspend.rules` | `/etc/udev/rules.d/` | Disables USB autosuspend on the DAS chain |
 | `99-dri.rules` | `/etc/udev/rules.d/` | Makes `/dev/dri/*` mode 0666 so the unprivileged media LXC (CT 202) can use the 780M for VAAPI |
+| `70-kfd.rules` | `/etc/udev/rules.d/` | Opens `/dev/kfd` (AMD ROCm compute) to the unprivileged media LXC so `immich-machine-learning:*-rocm` can use the 780M |
 | `nextcloud-das-recover.sh` | `/usr/local/sbin/` | Nextcloud recovery after a DAS flap |
 | `backup-scripts/` | `/home/n8n-backup/` + timers | Talos/k8s/PBS backup jobs (see its README) |
 
@@ -43,7 +44,7 @@ systemctl daemon-reload && systemctl enable --now beszel-agent
 # 3. DAS watchdog + udev (see the individual files)
 
 # 4. GPU access for the unprivileged media LXC
-cp 99-dri.rules /etc/udev/rules.d/
+cp 99-dri.rules 70-kfd.rules /etc/udev/rules.d/
 udevadm control --reload-rules && udevadm trigger
 ls -l /dev/dri/                                     # card0 + renderD128 should be crw-rw-rw-
 ```
