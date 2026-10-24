@@ -266,6 +266,22 @@ services:
       - TZ=America/Chicago
     restart: unless-stopped
 
+  # Downtify: search YouTube Music / paste a link -> tagged MP3 in /downloads.
+  # Jellyfin picks files up via real-time monitoring on the songs library. LAN-only (no auth).
+  downtify:
+    image: ghcr.io/henriquesebastiao/downtify:latest
+    container_name: downtify
+    # Docker Hub-style :latest — WUD watches the digest.
+    labels:
+      - wud.watch.digest=true
+    user: "1000:1000"
+    volumes:
+      - /mnt/sg-ext-hdd/Entertainment/songs:/downloads
+      - /mnt/das/downtify/data:/data
+    ports:
+      - "8097:8000"
+    restart: unless-stopped
+
   # ============================================================
   # NVR (Frigate) — REMOVED in Phase 13
   # Replaced by native Reolink integration + HA automations
