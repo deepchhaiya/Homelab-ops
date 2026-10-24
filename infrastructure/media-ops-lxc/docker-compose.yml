@@ -275,6 +275,8 @@ services:
     labels:
       - wud.watch.digest=true
     user: "1000:1000"
+    environment:
+      - XDG_CACHE_HOME=/data/cache  # uid 1000 has no home; yt-dlp cache fails on /.cache
     volumes:
       - /mnt/sg-ext-hdd/Entertainment/songs:/downloads
       - /mnt/das/downtify/data:/data
