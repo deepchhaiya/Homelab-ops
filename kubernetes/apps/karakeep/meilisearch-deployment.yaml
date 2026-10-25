@@ -19,11 +19,19 @@ spec:
         tier: ai-worker
       containers:
         - name: meilisearch
-          image: getmeili/meilisearch:v1.13
+          # Matches Karakeep upstream's compose pin (v1.41.0).
+          image: getmeili/meilisearch:v1.41.0
           ports:
             - containerPort: 7700
               name: http
           env:
+            # The search index is derived data that Karakeep can rebuild (Admin -> Background
+            # Jobs -> Reindex), so the v1.13 -> v1.41 jump starts on a fresh folder instead of
+            # migrating the old one. The v1.13 index stays untouched in /meili_data/data.ms
+            # as a rollback (revert this file). A dump and a tarball are also on Deep's Mac
+            # under ~/backups/karakeep-meilisearch-v1.13-20261025/.
+            - name: MEILI_DB_PATH
+              value: "/meili_data/data-v1.41.ms"
             - name: MEILI_NO_ANALYTICS
               value: "true"
             - name: MEILI_ENV
