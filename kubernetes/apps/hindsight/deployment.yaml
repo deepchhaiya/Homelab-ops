@@ -40,12 +40,8 @@ spec:
             - { containerPort: 8888, name: api }
             - { containerPort: 9999, name: ui }
           env:
-            # --- LLM: retain-time fact extraction via .84 Ollama ---
-            # qwen3:4b-instruct (non-thinking) chosen over qwen3.6:35b-a3b: the 35b
-            # is a thinking model (~35s/call, and its output broke Hindsight's JSON
-            # extraction). 4b-instruct returns clean JSON in all modes at ~1s, so
-            # retain/import stay fast; Hindsight's 4-strategy retrieval + reranker
-            # (all local) carry the recall quality.
+            # --- LLM: default model (consolidation + anything without its own override) ---
+            # Retain no longer uses this model; see the RETAIN_LLM block below.
             - { name: HINDSIGHT_API_LLM_PROVIDER,    value: "ollama" }
             - { name: HINDSIGHT_API_LLM_MODEL,       value: "qwen3:4b-instruct" }
             - { name: HINDSIGHT_API_LLM_BASE_URL,    value: "http://192.168.4.84:11434" }
@@ -104,6 +100,31 @@ spec:
             # Penalties deliberately untouched (Modelfile presence_penalty 1.5 still applies).
             - name: HINDSIGHT_API_REFLECT_LLM_EXTRA_BODY
               value: '{"options":{"temperature":0.7,"top_p":0.8,"top_k":20}}'
+            # --- LLM: retain-time fact extraction (2026-10-25) ---
+            # qwen3:4b-instruct broke on the ~2.7k-token extraction prompt plus the
+            # grammar-locked schema. At the global temperature 0.1 it looped: a 23k-token
+            # runaway until the 487s timeout, or garbage facts like "a s s i a n t" copied
+            # into every field. At 0.7 it stopped looping but returned {"facts": []} for
+            # a note with three clear facts. Both seen from 2026-10-24, before and after 1.1.0.
+            # Replaying the same recorded request on qwen3.6:35b-a3b gave one clean,
+            # consolidated fact in 6s. The old objection to the 35B (thinking output
+            # broke the JSON) no longer applies: Hindsight's native Ollama path sends
+            # think:false. It's already resident for reflect and the curator brief.
+            - { name: HINDSIGHT_API_RETAIN_LLM_PROVIDER,       value: "ollama" }
+            - { name: HINDSIGHT_API_RETAIN_LLM_MODEL,          value: "qwen3.6:35b-a3b" }
+            - { name: HINDSIGHT_API_RETAIN_LLM_BASE_URL,       value: "http://192.168.4.84:11434" }
+            - { name: HINDSIGHT_API_RETAIN_LLM_API_KEY,        value: "ollama-unused" }
+            # Retain shares the 35B with reflect and the curator (OLLAMA_NUM_PARALLEL=2).
+            - { name: HINDSIGHT_API_RETAIN_LLM_MAX_CONCURRENT, value: "1" }
+            # Qwen3 non-thinking sampling, same as reflect. Merged over Hindsight's own
+            # options on the native path, so it beats the global temperature 0.1
+            # (Qwen: greedy decoding causes endless repetition).
+            - name: HINDSIGHT_API_RETAIN_LLM_EXTRA_BODY
+              value: '{"options":{"temperature":0.7,"top_p":0.8,"top_k":20}}'
+            # Output cap (default 64000, more than the whole context). A one-chunk retain
+            # needs a few hundred tokens, so 8192 leaves headroom while making a runaway
+            # fail in ~3 min instead of holding Ollama until the timeout.
+            - { name: HINDSIGHT_API_RETAIN_MAX_COMPLETION_TOKENS, value: "8192" }
             # --- Recall speed. Reranking runs on this pod's CPU (cross-encoder); the
             # default 300 candidates per recall took ~110s on 3 cores inside reflect.
             # Reflect only uses the top ~10-20 results, so 100 keeps quality.
