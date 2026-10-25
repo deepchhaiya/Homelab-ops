@@ -104,8 +104,10 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 6
+          # pgrep -f "hermes gateway run" stopped matching in v0.22.5 (s6 launches the
+          # gateway via `python -c`), so liveness uses /health like readiness.
           livenessProbe:
-            exec: { command: ["pgrep", "-f", "hermes gateway run"] }
+            httpGet: { path: /health, port: 8642 }
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 5
