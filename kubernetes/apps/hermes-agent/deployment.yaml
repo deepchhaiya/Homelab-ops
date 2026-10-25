@@ -86,7 +86,7 @@ spec:
         # No messaging-platform sidecars; Open WebUI is the user-facing front-end.
         # ───────────────────────────────────────────────────────────────────
         - name: hermes
-          image: nousresearch/hermes-agent:v2026.6.5
+          image: nousresearch/hermes-agent:v0.22.5
           imagePullPolicy: IfNotPresent
           # `gateway run` = headless server mode (no TTY needed). Default entrypoint
           # is the interactive CLI which exits on `fd=0 is not a terminal`.
