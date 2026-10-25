@@ -171,17 +171,16 @@ spec:
           resources:
             requests: { cpu: "200m",  memory: "1Gi" }
             limits:   { cpu: "2000m", memory: "4Gi" }
-          # Exec probes (not HTTP) — the gateway only opens :8642 when API_SERVER_ENABLED=true,
-          # which we leave off until the user provides API_SERVER_KEY. Process check is
-          # enough: if the gateway python process is gone, the container is sick.
-          # When you enable API_SERVER, swap these for httpGet /health.
+          # HTTP probes on the API server's /health (API_SERVER is enabled). The old
+          # `pgrep -f "hermes gateway run"` check broke in v0.22.5: s6 now launches the
+          # gateway as `python -c ... sys.argv[0]='hermes'`, so the pattern never matches.
           readinessProbe:
-            exec: { command: ["pgrep", "-f", "hermes gateway run"] }
+            httpGet: { path: /health, port: 8642 }
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            exec: { command: ["pgrep", "-f", "hermes gateway run"] }
+            httpGet: { path: /health, port: 8642 }
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 5
