@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vmagent
-          image: victoriametrics/vmagent:v1.143.0       # multi-arch (arm64 for RPi4)
+          image: victoriametrics/vmagent:v1.154.1       # multi-arch (arm64 for RPi4)
           args:
             - "--promscrape.config=/config/scrape.yaml"
             - "--remoteWrite.url=http://192.168.4.66:8428/api/v1/write"
