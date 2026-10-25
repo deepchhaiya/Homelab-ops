@@ -5,7 +5,7 @@ networks:
 services:
   # Grafana Alloy — ships this LXC's Docker container logs to central Loki on CT405.
   alloy:
-    image: grafana/alloy:v1.20.1
+    image: grafana/alloy:v1.21.2
     container_name: alloy
     restart: unless-stopped
     command:
@@ -172,9 +172,9 @@ services:
     restart: unless-stopped
 
   mariadb:
-    image: linuxserver/mariadb:11.8.8
+    image: linuxserver/mariadb:11.8.9
     container_name: mariadb
-    # Pinned tag; digest watching makes WUD flag linuxserver rebuilds of 11.8.8.
+    # Pinned tag; digest watching makes WUD flag linuxserver rebuilds of 11.8.9.
     # Tuning lives off-repo in /var/lib/nextcloud-db/custom.cnf. Changed 2026-10-25:
     # innodb_log_file_size = 256M, and slave_connections_needed_for_purge = 0
     # (the 11.4+ default of 1 blocks all binlog expiry when there's no replica).
@@ -247,9 +247,9 @@ services:
   # MEDIA PLAYER (Jellyfin)
   # ============================================================
   jellyfin:
-    image: jellyfin/jellyfin:12.2
+    image: jellyfin/jellyfin:12.3
     container_name: jellyfin
-    # Pinned tag; digest watching makes WUD flag rebuilds of 12.2.
+    # Pinned tag; digest watching makes WUD flag rebuilds of 12.3.
     labels:
       - wud.watch.digest=true
     user: "1000:1000"
