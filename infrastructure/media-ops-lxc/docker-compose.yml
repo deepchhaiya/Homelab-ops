@@ -122,10 +122,11 @@ services:
   nextcloud:
     # PINNED to a major, not :stable. Nextcloud cannot skip majors: :stable moved
     # 32 -> 34 while this container sat on 32, so a bare pull would have failed
-    # the upgrade. Stepped 32.0.7 -> 32.0.15 -> 33.0.9 -> 34.0.4 on 2026-09-14.
-    # Next major: bump to 35-apache (one major at a time) after checking app
+    # the upgrade. Stepped 32.0.7 -> 32.0.15 -> 33.0.9 -> 34.0.4 on 2026-09-14,
+    # then 35.0.1 -> 35.0.2 (PHP 8.5.12, PHP2Shell fix) on 2026-10-25.
+    # Next major: bump to 36-apache (one major at a time) after checking app
     # compatibility at apps.nextcloud.com/api/v1/platform/<ver>/apps.json.
-    # WUD still picks up 34.x patch builds via the digest; the include regex makes
+    # WUD still picks up 35.x patch builds via the digest; the include regex makes
     # it surface the next major tag instead of every point-release tag.
     image: nextcloud:35-apache
     container_name: nextcloud
@@ -173,7 +174,10 @@ services:
   mariadb:
     image: linuxserver/mariadb:11.8.8
     container_name: mariadb
-    # Docker Hub :latest — WUD needs this to watch the digest.
+    # Pinned tag; digest watching makes WUD flag linuxserver rebuilds of 11.8.8.
+    # Tuning lives off-repo in /var/lib/nextcloud-db/custom.cnf. Changed 2026-10-25:
+    # innodb_log_file_size = 256M, and slave_connections_needed_for_purge = 0
+    # (the 11.4+ default of 1 blocks all binlog expiry when there's no replica).
     labels:
       - wud.watch.digest=true
     volumes:
@@ -245,7 +249,7 @@ services:
   jellyfin:
     image: jellyfin/jellyfin:12.2
     container_name: jellyfin
-    # Docker Hub :latest — WUD needs this to watch the digest.
+    # Pinned tag; digest watching makes WUD flag rebuilds of 12.2.
     labels:
       - wud.watch.digest=true
     user: "1000:1000"

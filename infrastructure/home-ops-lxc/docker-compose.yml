@@ -70,7 +70,10 @@ services:
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:2.16.0
     container_name: npm
-    # Docker Hub :latest — force WUD digest watching (see vaultwarden note).
+    # Pinned tag; force WUD digest watching so rebuilds get flagged (see vaultwarden note).
+    # 2026-10-25: 2.16.0 bundles openresty 1.31.1.1 (nginx 1.31.1), still exposed to
+    # F5's CVE-2026-15176/93479/97205 (fixed in nginx 1.31.7). Bump once an NPM
+    # release ships a patched OpenResty.
     labels:
       - wud.watch.digest=true
     volumes:
