@@ -64,6 +64,11 @@ spec:
               value: "8192"
             - name: INFERENCE_LANG
               value: english
+            # Semantic search embeddings (Karakeep 0.34+). Unset, it defaults to OpenAI's
+            # text-embedding-3-small, which Ollama doesn't have: every embeddings job failed
+            # with 404 and the bookmarks_vectors index stayed empty. Same Peladn Ollama as above.
+            - name: EMBEDDING_TEXT_MODEL
+              value: qwen3-embedding:0.6b
 
             # === Crawler — built-in headless Chromium for archival ===
             - name: CRAWLER_FULL_PAGE_ARCHIVE
