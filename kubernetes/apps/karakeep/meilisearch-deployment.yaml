@@ -32,6 +32,13 @@ spec:
             # under ~/backups/karakeep-meilisearch-v1.13-20261025/.
             - name: MEILI_DB_PATH
               value: "/meili_data/data-v1.41.ms"
+            # Meilisearch sizes indexing from the node (8 cores, 16 GB), not the pod limit.
+            # On 2026-10-27 a "Reindex all bookmarks" made v1.13 OOM-kill at 512Mi on every
+            # restart while it resumed the queued batch. Cap it well inside the limit below.
+            - name: MEILI_MAX_INDEXING_MEMORY
+              value: "384Mb"
+            - name: MEILI_MAX_INDEXING_THREADS
+              value: "2"
             - name: MEILI_NO_ANALYTICS
               value: "true"
             - name: MEILI_ENV
@@ -50,7 +57,7 @@ spec:
               memory: 128Mi
             limits:
               cpu: 1
-              memory: 512Mi
+              memory: 1Gi
           readinessProbe:
             httpGet:
               path: /health
