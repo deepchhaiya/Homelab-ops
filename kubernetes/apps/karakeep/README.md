@@ -133,7 +133,7 @@ To change models without redeploy: edit `INFERENCE_TEXT_MODEL` in `karakeep-depl
 
 - ✅ **Postgres backup** — covered by VM 402 backup (Wed 2 AM via DAS workflow). VM-level backup captures local-path Postgres data. No standalone CronJob needed.
 - ✅ **Meilisearch backup** — explicitly skipped. It's a derived index; rebuilds from Postgres + crawler re-fetch if ever lost.
-- ✅ **Wire to Miniflux** — done. `miniflux-sync-cronjob.yaml` polls starred Miniflux entries every 15 min and POSTs to `/api/v1/bookmarks`.
+- ❌ **Wire to Miniflux** — removed 2026-10-27. The miniflux-sync CronJob bookmarked every starred Miniflux entry, and n8n stars many posts automatically, so it flooded Karakeep. It had also been failing since 2026-08-31. Its tokens (`karakeep-sync-creds`) remain in `secret.enc.yaml`, unused.
 - 🟡 **Add to digest workflow** — deferred. Current digest (v2.1) is satisfactory; revisit if Karakeep-tag search becomes a recurring need.
 - 🟡 **Pull `qwen2.5:14b-instruct` on Evo-X2 for sharper tags** — deferred. Current `qwen3:4b-instruct` output is acceptable.
 

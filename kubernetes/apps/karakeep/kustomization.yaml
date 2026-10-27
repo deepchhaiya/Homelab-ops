@@ -13,4 +13,3 @@ resources:
   - karakeep-assets-pvc.yaml
   - karakeep-deployment.yaml
   - karakeep-service.yaml
-  - miniflux-sync-cronjob.yaml
