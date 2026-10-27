@@ -320,6 +320,10 @@ services:
   webtop:
     image: lscr.io/linuxserver/webtop:latest
     container_name: webtop
+    # Fixed hostname: Chromium's profile lock is "<hostname>-<pid>". With the default
+    # (container ID) every recreate looks like "another computer" and Chromium refuses
+    # to start (2026-10-27). The init script below clears any lock left at startup.
+    hostname: webtop
     devices:
       - /dev/dri:/dev/dri
     environment:
@@ -335,6 +339,8 @@ services:
       # backup until verified working.
       - /var/lib/webtop/config:/config
       - /mnt/wd-ext-hdd/webtop/downloads:/config/Downloads
+      # LSIO runs these as root before the desktop starts (must be root-owned).
+      - ./webtop/custom-cont-init.d:/custom-cont-init.d:ro
     ports:
       - "3000:3000"
       - "3001:3001"
