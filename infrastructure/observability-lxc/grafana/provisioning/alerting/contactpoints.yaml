@@ -13,3 +13,14 @@ contactPoints:
           url: https://notifications.dkghar.duckdns.org/message?token=$GF_ALERT_GOTIFY_TOKEN
           httpMethod: POST
         disableResolveMessage: false
+
+  # Same Gotify app, but no "RESOLVED" follow-ups: an IDS hit is a one-off event, not a state.
+  - orgId: 1
+    name: gotify-ids
+    receivers:
+      - uid: gotify_ids_webhook
+        type: webhook
+        settings:
+          url: https://notifications.dkghar.duckdns.org/message?token=$GF_ALERT_GOTIFY_TOKEN
+          httpMethod: POST
+        disableResolveMessage: true
