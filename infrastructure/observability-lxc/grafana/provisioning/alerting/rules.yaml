@@ -78,3 +78,50 @@ groups:
           severity: critical
         annotations:
           summary: 'A node-exporter target is DOWN ({{ $labels.host }})'
+
+  # --- Suricata IDS (OPNsense EVE JSON via syslog -> Alloy -> Loki) ---
+  # Severity 1-2 only; sev 3 is internet scan noise (Zmap etc.) — see the Suricata dashboard.
+  # "ET SCAN *" is excluded too: bots probing WAN :80, which NPM only 301s to HTTPS.
+  # What's left (ET EXPLOIT/MALWARE/TROJAN, outbound C2, ...) is worth a ping.
+  # One instance per signature+source, so a new attacker/signature pings even mid-incident.
+  # source=suricata routes it to gotify-ids (no resolve spam, 24h repeat) in policies.yaml.
+  - orgId: 1
+    name: security-alerts
+    folder: Homelab
+    interval: 1m
+    rules:
+      - uid: suricata-high-severity
+        title: Suricata IDS alert
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'sum by (alert_signature, alert_severity, src_ip, dest_port) (count_over_time({job="opnsense", program="suricata"} | alert_severity=~"1|2" | alert_signature!~"ET SCAN .*" [5m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          source: suricata
+        annotations:
+          summary: '[sev {{ $labels.alert_severity }}] {{ $labels.alert_signature }} from {{ $labels.src_ip }} -> port {{ $labels.dest_port }} ({{ $values.A }} hits / 5m)'
+          dashboardUid: opnsense-suricata
