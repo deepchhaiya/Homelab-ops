@@ -47,7 +47,7 @@
         description: Media streaming
     - Webtop:
         icon: mdi-monitor-dashboard
-        href: http://192.168.4.12:3000
+        href: https://chrome.dkghar.duckdns.org
         description: Browser-based desktop
 - Smart Home & Utilities:
     - Home Assistant:
