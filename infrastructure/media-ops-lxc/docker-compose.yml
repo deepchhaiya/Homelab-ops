@@ -379,11 +379,27 @@ services:
       # Reuses the webtop login; the image has no auth at all without these.
       - CUSTOM_USER=${WEBTOP_USER}
       - PASSWORD=${WEBTOP_PASSWORD}
+      - TITLE=Obsidian
+      # The GUI terminal has passwordless sudo = root in the container for anyone who
+      # gets past basic auth. A notes client needs neither terminal nor sudo.
+      - HARDEN_DESKTOP=true
+      # HARDEN_DESKTOP turns file transfer off by default; keep it for uploading
+      # PDFs/images from the work laptop into the vault.
+      - SELKIES_FILE_TRANSFERS=upload,download
+      # Software-encoded stream (no /dev/dri): a note-taking screen doesn't need 60 fps,
+      # and a lower cap keeps CPU down on the shared LXC.
+      - SELKIES_FRAMERATE=8-30
+      - SELKIES_AUDIO_ENABLED=false
+      - SELKIES_GAMEPAD_ENABLED=false
+      - NO_GAMEPAD=true
+      - NO_WEBCAM=true
+      - SELKIES_ENABLE_SHARING=false
     volumes:
       - /var/lib/obsidian/config:/config
     ports:
+      # HTTP only, for NPM (which terminates TLS; the image requires HTTPS in the browser).
+      # The direct-HTTPS port 3001 is deliberately not published.
       - "3010:3000"
-      - "3011:3001"
     shm_size: "1gb"
     # LXC is 16 GB shared with Nextcloud/Immich/Jellyfin/Ollama. LiveSync's local
     # IndexedDB cache grows large (925 MB on the Mac), so leave headroom but cap it.
