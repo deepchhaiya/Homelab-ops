@@ -352,6 +352,47 @@ services:
     restart: unless-stopped
 
   # ============================================================
+  # OBSIDIAN IN THE BROWSER (second LiveSync client)
+  # ============================================================
+  # Official LSIO image: Selkies desktop with Obsidian preinstalled. A separate
+  # container because webtop is Alpine (musl) and Obsidian only ships glibc Electron
+  # builds. Open it from the work laptop, then point the Self-hosted LiveSync plugin at
+  # CouchDB (obsidianls.dkghar.duckdns.org) so it replicates like the Mac client.
+  # Keep the vault inside /config (NVMe). Never put it in a Nextcloud-synced folder:
+  # LiveSync forbids a second sync engine on the same files. Do NOT bind-mount
+  # /mnt/das/nextcloud/.../Notes/ObsidianNotes: it is a stale server copy (the Phase 33
+  # livesync-mirror isn't running) and writes there bypass Nextcloud. Attachment/paste
+  # settings (.obsidian/app.json, ./attachments) arrive via LiveSync hidden-file sync (Fetch).
+  # NPM (CT203) proxies obsidiandesk.dkghar.duckdns.org -> 192.168.4.12:3010 with
+  # Websockets on and the same private ACL as chrome.dkghar. No /dev/dri on purpose:
+  # note-taking doesn't need GPU encode, and webtop already shares the iGPU.
+  obsidian:
+    image: lscr.io/linuxserver/obsidian:latest
+    container_name: obsidian
+    # Fixed hostname: Obsidian is Electron/Chromium, so the same SingletonLock-vs-container-ID
+    # problem as webtop (2026-10-27) would hit on every recreate.
+    hostname: obsidian
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Chicago
+      # Reuses the webtop login; the image has no auth at all without these.
+      - CUSTOM_USER=${WEBTOP_USER}
+      - PASSWORD=${WEBTOP_PASSWORD}
+    volumes:
+      - /var/lib/obsidian/config:/config
+    ports:
+      - "3010:3000"
+      - "3011:3001"
+    shm_size: "1gb"
+    # LXC is 16 GB shared with Nextcloud/Immich/Jellyfin/Ollama. LiveSync's local
+    # IndexedDB cache grows large (925 MB on the Mac), so leave headroom but cap it.
+    mem_limit: 3g
+    ulimits:
+      core: 0
+    restart: unless-stopped
+
+  # ============================================================
   # IMAGE-UPDATE MONITOR (What's Up Docker)
   # ============================================================
   # Watches every local container for newer image tags/digests and exposes an
