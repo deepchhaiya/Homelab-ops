@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec-agent
+  namespace: crowdsec
+spec:
+  replicas: 1
+  # Agent-only and stateless: no point running two copies that would raise
+  # the same alerts twice.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: crowdsec-agent
+  template:
+    metadata:
+      labels:
+        app: crowdsec-agent
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ira-rpi4-talos-worker   # always-on worker
+      containers:
+        - name: crowdsec
+          image: crowdsecurity/crowdsec:v1.8.2           # multi-arch (arm64 for RPi4)
+          env:
+            - name: TZ
+              value: America/Chicago
+            # Log processor only. The LAPI (decisions DB) and the firewall
+            # bouncer run on OPNsense via the os-crowdsec plugin.
+            - name: DISABLE_LOCAL_API
+              value: "true"
+            - name: LOCAL_API_URL
+              value: http://192.168.4.1:8080
+            - name: AGENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-agent
+                  key: AGENT_USERNAME
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-agent
+                  key: AGENT_PASSWORD
+            - name: COLLECTIONS
+              value: crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve
+          volumeMounts:
+            - name: acquis
+              mountPath: /etc/crowdsec/acquis.d
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/crowdsec/data
+          securityContext:
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: acquis
+          configMap:
+            name: crowdsec-acquis
+        - name: data
+          emptyDir: {}

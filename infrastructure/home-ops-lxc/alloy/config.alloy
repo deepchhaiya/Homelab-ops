@@ -62,3 +62,22 @@ loki.source.file "npm_access" {
   targets    = local.file_match.npm_access.targets
   forward_to = [loki.process.npm_access.receiver]
 }
+
+// NPM catch-all logs: requests that matched no proxy host (raw-IP hits, unknown
+// hostnames, plain-HTTP probes). Same line format as proxy-host access logs.
+// Separate job so npm_access dashboards/queries keep counting only real hosts;
+// the CrowdSec agent (kubernetes/apps/crowdsec) reads both jobs.
+// Error logs are left out on purpose: no basic-auth failures to parse, and
+// "access forbidden by rule" already shows up as 403 in the access logs.
+local.file_match "npm_fallback" {
+  path_targets = [
+    {"__path__" = "/var/lib/npm/data/logs/fallback_access.log", "job" = "npm_fallback"},
+    {"__path__" = "/var/lib/npm/data/logs/fallback_http_access.log", "job" = "npm_fallback"},
+    {"__path__" = "/var/lib/npm/data/logs/default-host_access.log", "job" = "npm_fallback"},
+  ]
+}
+
+loki.source.file "npm_fallback" {
+  targets    = local.file_match.npm_fallback.targets
+  forward_to = [loki.write.central.receiver]
+}
