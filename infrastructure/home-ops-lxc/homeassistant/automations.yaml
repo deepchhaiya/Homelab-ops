@@ -119,58 +119,32 @@
   mode: single
 - id: '1755730019218'
   alias: Garage Door Quick State Change + PIR Motion Activates Living Room Light
-  description: ''
+  description: >-
+    At night, if the garage door opened or closed in the last 5 minutes
+    (timer.garage_door_open_state_timer is active), opening the garage-to-house
+    entrance door (wired alarm zone, no battery) turns on the living room
+    lights for 5 minutes. Someone leaving opens the entrance door before the
+    garage, so the timer is not active and the lights stay off. The PIR trigger
+    is kept but disabled to save its battery. mode: restart means a new trigger
+    restarts the 5-minute countdown.
   triggers:
-  - entity_id:
-    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
-    to: open
-    trigger: state
-    enabled: true
-    for:
-      hours: 0
-      minutes: 1
-      seconds: 0
-  - entity_id:
-    - cover.smart_garage_door_2306292944843761070348e1e9cd1ec3_garage
-    to: closed
-    trigger: state
-    enabled: true
-    for:
-      hours: 0
-      minutes: 1
-      seconds: 0
+  - trigger: state
+    entity_id:
+    - binary_sensor.front_garage_entrance_door
+    from: 'off'
+    to: 'on'
   - trigger: state
     entity_id:
     - binary_sensor.wifi_pirchuan_gan_qi_motion
     to: 'on'
-    enabled: true
-  - trigger: state
-    entity_id:
-    - timer.garage_door_open_state_timer
-    to: active
     enabled: false
   conditions:
   - condition: state
-    entity_id: binary_sensor.wifi_pirchuan_gan_qi_motion
-    state: 'on'
-    enabled: false
-  - condition: sun
-    after: sunset
-    before: sunrise
+    entity_id: sun.sun
+    state: below_horizon
   - condition: state
     entity_id: timer.garage_door_open_state_timer
     state: active
-    enabled: true
-  - type: is_motion
-    condition: device
-    device_id: 806543fc92346d737eb7334dd6c4cbf8
-    entity_id: e7d9afc31862429e32139f5ef286aa1f
-    domain: binary_sensor
-    for:
-      hours: 0
-      minutes: 0
-      seconds: 1
-    enabled: false
   actions:
   - action: switch.turn_on
     metadata: {}
@@ -191,10 +165,12 @@
       device_id:
       - 9d78d5bcf590614697b65aa388517b57
       - daab1334615e250781e5cc2a3991be60
-  mode: single
+  mode: restart
 - id: '1755750389598'
   alias: Garage Door Timer Automation
-  description: ''
+  description: >-
+    Garage door open for 10 s: start the 5-minute garage-entry window. No sun
+    condition here; darkness is checked by the light automation.
   triggers:
   - trigger: state
     entity_id:
@@ -204,21 +180,20 @@
       hours: 0
       minutes: 0
       seconds: 10
-  conditions:
-  - condition: sun
-    after: sunset
-    before: sunrise
+  conditions: []
   actions:
   - action: timer.start
     metadata: {}
     data:
-      duration: 00:10:00
+      duration: 00:05:00
     target:
       entity_id: timer.garage_door_open_state_timer
   mode: single
 - id: '1755998087179'
   alias: Garage Door Closing Timer Reset
-  description: ''
+  description: >-
+    Garage door closed for 5 s: restart the 5-minute garage-entry window so
+    someone walking in after closing the door still gets the light.
   triggers:
   - trigger: state
     entity_id:
@@ -228,15 +203,12 @@
       hours: 0
       minutes: 0
       seconds: 5
-  conditions:
-  - condition: sun
-    after: sunset
-    before: sunrise
+  conditions: []
   actions:
   - action: timer.start
     metadata: {}
     data:
-      duration: 00:04:00
+      duration: 00:05:00
     target:
       entity_id: timer.garage_door_open_state_timer
   mode: single
@@ -446,6 +418,7 @@
       snapshot_interval_ms: 400
       visitor_minimize_load: false
       motion_sensor: binary_sensor.garage_motion
+      cooldown: 45
 - id: '1776018402287'
   alias: Frondoor Notifications
   description: Frontdoor Camera Notifications for any person, animal or vehicle inside
