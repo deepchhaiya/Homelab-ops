@@ -45,7 +45,10 @@ spec:
               value: crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve
           volumeMounts:
             - name: acquis
-              mountPath: /etc/crowdsec/acquis.d
+              # Mount only the file: the entrypoint rsyncs defaults into
+              # /etc/crowdsec and fails if acquis.d itself is read-only.
+              mountPath: /etc/crowdsec/acquis.d/loki-npm.yaml
+              subPath: loki-npm.yaml
               readOnly: true
             - name: data
               mountPath: /var/lib/crowdsec/data
