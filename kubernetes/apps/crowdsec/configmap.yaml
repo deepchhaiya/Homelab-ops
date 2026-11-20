@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-acquis
+  namespace: crowdsec
+data:
+  # NPM access logs, read from Loki. Alloy on the home-ops LXC ships them with
+  # raw lines unchanged: proxy-host-*_access.log as job="npm_access", the
+  # catch-all fallback/default-host logs as job="npm_fallback". The hub parser
+  # crowdsecurity/nginx-proxy-manager-logs filters on program
+  # "nginx-proxy-manager", which the type label sets.
+  loki-npm.yaml: |
+    source: loki
+    url: http://192.168.4.66:3100
+    query: |
+      {job=~"npm_access|npm_fallback"}
+    limit: 1000
+    # Loki's /ready answers 503 "waiting for 15s after being ready" until 15s
+    # after the FIRST /ready call since Loki started, then stays 200. If this
+    # agent is the first caller after a Loki restart, the default 10s wait
+    # gives up too early.
+    wait_for_ready: 30s
+    # Ride out a Loki restart instead of dropping the datasource after 30s.
+    max_failure_duration: 10m
+    labels:
+      type: nginx-proxy-manager
