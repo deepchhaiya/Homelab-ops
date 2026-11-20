@@ -16,6 +16,12 @@ spec:
     metadata:
       labels:
         app: crowdsec-agent
+      # vmagent's kubernetes-pods job scrapes the agent's Prometheus endpoint
+      # (cs_* metrics) for the CrowdSec tab of the NPM Grafana dashboard.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6060"
+        prometheus.io/path: /metrics
     spec:
       nodeSelector:
         kubernetes.io/hostname: ira-rpi4-talos-worker   # always-on worker
