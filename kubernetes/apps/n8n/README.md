@@ -10,7 +10,7 @@ Self-hosted workflow automation platform. Used for AI pipeline orchestration, WO
 | WOL — i9 GPU | Webhook / Cron | Wake i9 burst node for GPU workloads |
 | mem0 sync | Webhook | Push facts to mem0 from external tools |
 | Beszel alerts | Webhook | Parse Beszel metric alerts, notify via Gotify |
-| Monitoring Watchdog (`workflows/monitoring-watchdog.json`) | Every 5 min | Probes Grafana, VictoriaMetrics, Loki (CT405) and Gotify from outside. Down after 2 misses (~10 min): Gotify app *Homelab Watchdog*, or Gmail if Gotify is the one down. Sends a reminder every ~6 h and a message on recovery. Grafana watches back via `up{job="n8n"}` (`N8N_METRICS=true`). |
+| Monitoring Watchdog (`workflows/monitoring-watchdog.json`) | Every 5 min | Probes Grafana, VictoriaMetrics, Loki (CT405) and Gotify from outside. A failed probe is re-checked after 3 min; if it fails again, it sends one [DOWN] message (Gotify app *Homelab Watchdog*, or Gmail if Gotify is the one down), a reminder every 6 h, and one [RESOLVED] message when the service is back. Grafana watches back via `up{job="n8n"}` (`N8N_METRICS=true`). |
 
 ## Configuration
 
