@@ -105,6 +105,35 @@ services:
     depends_on:
       - loki
 
+  # OPNsense API exporter: gateway RTT/loss/status, pf states vs limit, per-interface
+  # pf pass/block, WireGuard peers, services up/down, firmware updates, ARP, TCP states,
+  # temperatures, mbufs. Complements Telegraf (system/NIC/Unbound) on 192.168.4.1:9273.
+  # Internal-only: VictoriaMetrics scrapes it over the compose network (no published port).
+  # API user/key: see README "OPNsense exporter". Key + secret live in .env (SOPS .env.enc.yaml).
+  opnsense-exporter:
+    image: ghcr.io/athennamind/opnsense-exporter:0.0.19
+    container_name: opnsense-exporter
+    restart: unless-stopped
+    command:
+      - --opnsense.protocol=https
+      - --opnsense.address=192.168.4.1
+      - --opnsense.insecure            # OPNsense GUI uses its self-signed cert
+      - --exporter.instance-label=opnsense
+      - --web.listen-address=:8080
+      - --log.format=json
+      - --exporter.disable-ipsec       # no IPsec / OpenVPN / CARP on this firewall
+      - --exporter.disable-openvpn
+      - --exporter.disable-carp
+      - --exporter.disable-kea-dhcpv4    # DHCP is dnsmasq; leases come from its logs instead
+      - --exporter.disable-kea-dhcpv6
+    environment:
+      - OPNSENSE_EXPORTER_OPS_API_KEY=${OPNSENSE_API_KEY:-}
+      - OPNSENSE_EXPORTER_OPS_API_SECRET=${OPNSENSE_API_SECRET:-}
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
 volumes:
   vm-data:
   loki-data:

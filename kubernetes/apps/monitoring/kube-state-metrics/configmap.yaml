@@ -1,0 +1,60 @@
+# Flux v2.x no longer exports gotk_reconcile_* metrics; reconcile state now comes from
+# kube-state-metrics custom-resource-state (pattern from fluxcd/flux2-monitoring-example).
+# Result: gotk_resource_info{customresource_kind, name, exported_namespace, ready, suspended, revision}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-state-metrics-crs
+  namespace: monitoring
+data:
+  flux.yaml: |
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+        - groupVersionKind: { group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization }
+          metricNamePrefix: gotk
+          metrics:
+            - name: resource_info
+              help: The current state of a Flux Kustomization.
+              each:
+                type: Info
+                info:
+                  labelsFromPath:
+                    name: [metadata, name]
+              labelsFromPath:
+                exported_namespace: [metadata, namespace]
+                ready: [status, conditions, "[type=Ready]", status]
+                suspended: [spec, suspend]
+                revision: [status, lastAppliedRevision]
+                source_name: [spec, sourceRef, name]
+        - groupVersionKind: { group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository }
+          metricNamePrefix: gotk
+          metrics:
+            - name: resource_info
+              help: The current state of a Flux GitRepository.
+              each:
+                type: Info
+                info:
+                  labelsFromPath:
+                    name: [metadata, name]
+              labelsFromPath:
+                exported_namespace: [metadata, namespace]
+                ready: [status, conditions, "[type=Ready]", status]
+                suspended: [spec, suspend]
+                revision: [status, artifact, revision]
+                url: [spec, url]
+        - groupVersionKind: { group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease }
+          metricNamePrefix: gotk
+          metrics:
+            - name: resource_info
+              help: The current state of a Flux HelmRelease.
+              each:
+                type: Info
+                info:
+                  labelsFromPath:
+                    name: [metadata, name]
+              labelsFromPath:
+                exported_namespace: [metadata, namespace]
+                ready: [status, conditions, "[type=Ready]", status]
+                suspended: [spec, suspend]
+                revision: [status, lastAttemptedRevision]
