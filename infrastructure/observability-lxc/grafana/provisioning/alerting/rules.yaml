@@ -25,7 +25,7 @@ groups:
               datasource:
                 type: loki
                 uid: loki
-              expr: 'sum(count_over_time({namespace=~".+"} |~ "(?i)(panic|fatal|crashloopbackoff|oomkilled)" [10m]))'
+              expr: 'sum(count_over_time({job="loki.source.kubernetes.pods", namespace=~".+"} |~ "(?i)(panic|fatal|crashloopbackoff|oomkilled)" [10m]))'
               queryType: instant
               refId: A
           - refId: C
@@ -125,3 +125,429 @@ groups:
         annotations:
           summary: '[sev {{ $labels.alert_severity }}] {{ $labels.alert_signature }} from {{ $labels.src_ip }} -> port {{ $labels.dest_port }} ({{ $values.A }} hits / 5m)'
           dashboardUid: opnsense-suricata
+
+  # --- Kubernetes (kube-state-metrics + node-exporter via vmagent -> VictoriaMetrics) ---
+  # Sleeping WOL workers are cordoned (kube_node_spec_unschedulable == 1); every rule that
+  # could trip on them excludes those nodes. noDataState=OK: "nothing matched" is healthy.
+  - orgId: 1
+    name: kubernetes-alerts
+    folder: Homelab
+    interval: 1m
+    rules:
+      - uid: k8s-node-not-ready
+        title: K8s node NotReady
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'count by (node) ((kube_node_status_condition{condition="Ready", status="true"} == 0) unless on (node) (kube_node_spec_unschedulable == 1))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Node {{ $labels.node }} is NotReady but not cordoned (not a WOL sleep)'
+          dashboardUid: k8s-cluster
+      - uid: k8s-pod-crashlooping
+        title: K8s container restarting repeatedly
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'sum by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total[15m]))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [2]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) restarted {{ $values.A }} times in 15m'
+          dashboardUid: k8s-workloads
+      - uid: k8s-container-oomkilled
+        title: K8s container OOMKilled
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'sum by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total[10m]) and on (namespace, pod, container) (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOMKilled: raise its memory limit'
+          dashboardUid: k8s-workloads
+      # DaemonSet pods parked Pending on sleeping WOL nodes are excluded.
+      - uid: k8s-pod-not-healthy
+        title: K8s pod stuck Pending/Failed
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'count by (namespace, pod) ((kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) unless on (namespace, pod) (kube_pod_info and on (node) (kube_node_spec_unschedulable == 1)))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.pod }} not running for 15m'
+          dashboardUid: k8s-cluster
+      - uid: k8s-workload-degraded
+        title: K8s workload below desired replicas
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (namespace, deployment) (kube_deployment_spec_replicas - kube_deployment_status_replicas_available) or max by (namespace, statefulset) (kube_statefulset_replicas - kube_statefulset_status_replicas_ready)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.deployment }}{{ $labels.statefulset }} is missing {{ $values.A }} replica(s)'
+          dashboardUid: k8s-cluster
+      - uid: k8s-node-var-full
+        title: K8s node /var filling up
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: '100 * (1 - max by (node) (node_filesystem_avail_bytes{job="kubernetes-node-exporter", mountpoint="/var"}) / max by (node) (node_filesystem_size_bytes{job="kubernetes-node-exporter", mountpoint="/var"}))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [85]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.node }} /var is {{ printf "%.0f" $values.A.Value }}% full (local-path PVCs + images); kubelet evicts at ~90%'
+          dashboardUid: k8s-cluster
+      - uid: flux-not-ready
+        title: Flux resource not Ready
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'count by (customresource_kind, exported_namespace, name) (gotk_resource_info{ready="False"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Flux {{ $labels.customresource_kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} is failing to reconcile'
+          dashboardUid: k8s-cluster
+      # Exporters other alerts depend on. (node-* LXC exporters are covered by scrape-target-down.)
+      - uid: monitoring-exporter-down
+        title: Monitoring exporter down
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'min by (job) (up{job=~"kube-state-metrics|apiserver|coredns|opnsense-exporter|alloy-observability|telegraf-opnsense"}) or label_replace(min(opnsense_up), "job", "opnsense-api", "", "")'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              refId: C
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Scrape job {{ $labels.job }} is down: its dashboards and alerts are blind (opnsense-api = exporter up but OPNsense API key/permissions failing)'
+
+  # --- OPNsense (opnsense-exporter API metrics) ---
+  - orgId: 1
+    name: opnsense-alerts
+    folder: Homelab
+    interval: 1m
+    rules:
+      # status 0 = offline. 6 (forced offline) is deliberate and ignored.
+      - uid: opnsense-gateway-down
+        title: OPNsense gateway offline
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'count by (name) (opnsense_gateways_status == 0)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Gateway {{ $labels.name }} is offline (dpinger)'
+          dashboardUid: opnsense-health
+      - uid: opnsense-gateway-loss
+        title: OPNsense gateway packet loss
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (name) (opnsense_gateways_loss_percentage)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Gateway {{ $labels.name }} losing {{ $values.A }}% of probes for 10m'
+          dashboardUid: opnsense-health
+      - uid: opnsense-pf-states-high
+        title: OPNsense pf state table filling
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: '100 * max(opnsense_pf_states_current) / max(opnsense_pf_states_limit)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [80]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: 'pf state table at {{ printf "%.0f" $values.A.Value }}% of limit: new connections will be dropped at 100%'
+          dashboardUid: opnsense-health
+      - uid: opnsense-service-stopped
+        title: OPNsense service stopped
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'count by (name, description) (opnsense_services_status == 0)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+        annotations:
+          summary: 'OPNsense service {{ $labels.description }} ({{ $labels.name }}) is stopped'
+          dashboardUid: opnsense-health

@@ -45,6 +45,70 @@ VictoriaMetrics/Loki stay internal-only.
 No secrets committed. `GRAFANA_ADMIN_PASSWORD` lives in a gitignored `.env` (or SOPS
 `.env.enc.yaml`). Everything else is non-sensitive config.
 
+## Dashboards (provisioned from `grafana/provisioning/dashboards/json`)
+
+| Dashboard | Source | Shows |
+|---|---|---|
+| OPNsense Network | Telegraf | WAN/LAN throughput, CPU/mem/disk, speedtest |
+| **OPNsense Firewall** | filterlog (Loki) + Alloy counters + opnsense-exporter | block/NAT rates, **rule matches** (rule # + tracker), top blocked sources/ports/destinations, top NAT talkers, firewall log, new LAN devices (hostwatch) |
+| **OPNsense Health** | opnsense-exporter + Telegraf Unbound + DNS log | gateway status/RTT/loss, WireGuard peers, services, firmware/reboot, pf states, mbufs, DNS rates/rcodes/top names/clients, TCP states, ARP, temps, auth & system logs |
+| OPNsense Suricata IDS | Suricata EVE (Loki) | alerts, signatures, sources |
+| **Kubernetes Cluster** | kubelet/cAdvisor + kube-state-metrics + node-exporter + apiserver + CoreDNS + events | `kubectl top nodes/pods` equivalents, requests vs allocatable, unhealthy pods, restarts, OOM reasons, PVCs, control plane, Flux, warning events, error-log rates |
+| **Kubernetes Workloads** | same + pod logs | per namespace/pod: CPU/mem vs request/limit, throttling, restarts, events, logs with search |
+| Homelab Backups | textfile metrics | backup freshness |
+
+`kubectl top` reads metrics-server, which keeps only the latest sample in memory. The
+Grafana "top" panels read the same kubelet/cAdvisor data from VictoriaMetrics, with 90 d
+of history.
+
+## Log-derived metrics (`config.alloy` → `alloy:12345/metrics`, job `alloy-observability`)
+
+| Metric | Labels |
+|---|---|
+| `opnsense_filterlog_entries_total` | action, iface, dir, proto, ipversion |
+| `opnsense_dns_replies_total` | rcode, cached |
+| `opnsense_suricata_alerts_total` | alert_severity |
+| `opnsense_hostwatch_new_stations_total` | iface |
+
+The counters are cheap to query over long ranges, so stat and rate panels use them. IPs,
+ports and rule ids stay as Loki **structured metadata** (`src_ip`, `dst_ip`, `src_port`,
+`dst_port`, `proto`, `rule`, `tracker`), never labels. The counters start at zero when this
+config is deployed. The Loki-backed tables only get the new fields for lines ingested after
+the rollout.
+
+## OPNsense exporter (one-time setup)
+
+1. **System › Access › Users → add** `svc-exporter` with a random password, no shell, and
+   these privileges only: *Diagnostics: ARP Table, Diagnostics: Firewall statistics,
+   Diagnostics: Netstat, Lobby: Dashboard, Reporting: Traffic, Services: Unbound (MVC),
+   Status: DHCP leases, Status: DNS Overview, Status: Services, System: Firmware,
+   System: Gateways, System: Settings: Cron, System: Status, VPN: WireGuard*.
+   (No Kea privilege: DHCP is dnsmasq, and the Kea collectors are disabled.)
+2. On that user, under **API keys**, click **+** to download `apikey.txt`.
+3. Put `key=` into `OPNSENSE_API_KEY` and `secret=` into `OPNSENSE_API_SECRET` with
+   `sops .env.enc.yaml`. Then `sops -d .env.enc.yaml > .env` on CT405. Delete the downloaded file.
+4. Unbound DNS › Advanced: enable **Extended Statistics**.
+
+## OPNsense remote logging (System › Settings › Logging › Remote)
+
+Over the last 30 days only `filterlog`, `suricata`, `hostwatch` and `wireguard` reached
+Loki. To fill the **auth / system log** panels, add these applications to the 1514 TCP
+target: `audit` (GUI logins, config changes), `sshd`, `lighttpd`, `dpinger` (gateway
+alarms), `configd`, `dnsmasq` (DHCP leases: parsed into `opnsense_dhcp_messages_total`
+and the DHCP row on OPNsense Health; also enable DHCP logging in the dnsmasq settings). Only `block` and `nat` show up in filterlog. To count
+**pass** matches for a rule, tick *Log packets that are handled by this rule* on that rule.
+Do this only on rules you care about: pass logging is high volume.
+
+## Rollout / verify
+
+```bash
+# on CT405, after git pull
+docker compose run --rm --no-deps alloy fmt /etc/alloy/config.alloy   # syntax check before restart
+docker compose up -d                       # starts opnsense-exporter (VM reloads scrape.yaml itself)
+docker compose restart alloy grafana       # bind-mounted config: alloy pipeline, new dashboards + alert rules
+curl -s localhost:8428/api/v1/targets | grep -o '"job":"[a-z-]*","health":"[a-z]*"' | sort -u
+```
+
 ## Next (Tier 2)
 
 smartctl_exporter (drive temps incl. the 26 TB/2 TB externals, `-d sat,16`),

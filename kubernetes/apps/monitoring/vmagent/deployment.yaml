@@ -41,10 +41,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 64Mi
+              memory: 96Mi
             limits:
-              cpu: 200m
-              memory: 192Mi
+              cpu: 300m
+              memory: 320Mi   # was 192Mi; +KSM/node-exporter/apiserver/coredns series
       volumes:
         - name: config
           configMap:

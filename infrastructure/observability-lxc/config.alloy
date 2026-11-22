@@ -46,19 +46,50 @@ loki.relabel "opnsense_program" {
 }
 
 loki.process "opnsense" {
-  // filterlog is CSV. Fields 5-9 sit at fixed positions for BOTH IPv4 and IPv6;
-  // everything after field 9 shifts between them, so don't extract further here.
+  // ── filterlog (pf) — CSV. Fields 1-9 are fixed for IPv4 and IPv6; after field 9 the
+  // layouts differ, so there is one regex per IP version (a non-matching stage.regex is a
+  // no-op). Field map (OPNsense filterlog format):
+  //   1 rule nr, 4 tracker (rule id — the same id the Firewall › Log Files › Live View
+  //   "rule" link uses), 5 iface, 6 reason, 7 action, 8 dir, 9 ipversion
+  //   v4: 17 protoname, 19 src, 20 dst, 21 sport, 22 dport (tcp/udp only)
+  //   v6: 13 protoname, 16 src, 17 dst, 18 sport, 19 dport (tcp/udp only)
   stage.match {
     selector = "{program=\"filterlog\"}"
     stage.regex {
-      expression = "^[^,]*,[^,]*,[^,]*,[^,]*,(?P<iface>[^,]*),(?P<reason>[^,]*),(?P<action>[^,]*),(?P<dir>[^,]*),(?P<ipversion>[^,]*),"
+      expression = `^(?P<rule>[^,]*),[^,]*,[^,]*,(?P<tracker>[^,]*),(?P<iface>[^,]*),(?P<reason>[^,]*),(?P<action>[^,]*),(?P<dir>[^,]*),(?P<ipversion>4),(?:[^,]*,){7}(?P<proto>[^,]*),[^,]*,(?P<src_ip>[^,]*),(?P<dst_ip>[^,]*)(?:,(?P<src_port>\d+),(?P<dst_port>\d+))?`
     }
+    stage.regex {
+      expression = `^(?P<rule>[^,]*),[^,]*,[^,]*,(?P<tracker>[^,]*),(?P<iface>[^,]*),(?P<reason>[^,]*),(?P<action>[^,]*),(?P<dir>[^,]*),(?P<ipversion>6),(?:[^,]*,){3}(?P<proto>[^,]*),[^,]*,[^,]*,(?P<src_ip>[^,]*),(?P<dst_ip>[^,]*)(?:,(?P<src_port>\d+),(?P<dst_port>\d+))?`
+    }
+
+    // Log-derived counter -> Alloy /metrics -> VictoriaMetrics (job alloy-observability).
+    // Labels are promoted only long enough for stage.metrics to read them, then dropped,
+    // so Loki streams stay as they were (IPs/ports/rule stay structured metadata).
+    // Exposed as opnsense_filterlog_entries_total{action,iface,dir,proto,ipversion}.
+    stage.labels {
+      values = { action = "", iface = "", dir = "", proto = "", ipversion = "" }
+    }
+    stage.metrics {
+      metric.counter {
+        name        = "filterlog_entries_total"
+        prefix      = "opnsense_"
+        description = "OPNsense filterlog entries by action/interface/direction/protocol."
+        match_all   = true
+        action      = "inc"
+      }
+    }
+    stage.label_drop {
+      values = ["action", "iface", "dir", "proto", "ipversion"]
+    }
+
     stage.structured_metadata {
-      values = { iface = "", reason = "", action = "", dir = "", ipversion = "" }
+      values = { iface = "", reason = "", action = "", dir = "", ipversion = "",
+                 rule = "", tracker = "", proto = "",
+                 src_ip = "", dst_ip = "", src_port = "", dst_port = "" }
     }
   }
 
-  // Suricata EVE-over-syslog is pure JSON
+  // ── Suricata EVE-over-syslog is pure JSON ──
   stage.match {
     selector = "{program=\"suricata\"} |~ \"^\\\\{\""
     stage.json {
@@ -76,7 +107,84 @@ loki.process "opnsense" {
       values = { alert_signature = "", alert_sid = "", alert_severity = "",
                  src_ip = "", dest_ip = "", dest_port = "", app_proto = "" }
     }
+    // opnsense_suricata_alerts_total{alert_severity} — alerts only, not flow/stats events
+    stage.match {
+      selector = "{program=\"suricata\"} |= \"\\\"event_type\\\":\\\"alert\\\"\""
+      stage.labels {
+        values = { alert_severity = "" }
+      }
+      stage.metrics {
+        metric.counter {
+          name        = "suricata_alerts_total"
+          prefix      = "opnsense_"
+          description = "Suricata IDS alerts by severity."
+          match_all   = true
+          action      = "inc"
+        }
+      }
+      stage.label_drop {
+        values = ["alert_severity"]
+      }
+    }
   }
+
+  // ── hostwatch: "new station host <mac> using <ip> at <iface>" = a device/address
+  // appeared on a LAN segment. Counter + metadata for the "new devices" panels.
+  stage.match {
+    selector = "{program=\"hostwatch\"} |= \"new station\""
+    stage.regex {
+      expression = `new station host (?P<mac>\S+) using (?P<host_ip>\S+) at (?P<iface>\S+)`
+    }
+    stage.structured_metadata {
+      values = { mac = "", host_ip = "", iface = "" }
+    }
+    stage.labels {
+      values = { iface = "" }
+    }
+    stage.metrics {
+      metric.counter {
+        name        = "hostwatch_new_stations_total"
+        prefix      = "opnsense_"
+        description = "hostwatch new station (MAC/IP pair) sightings by interface."
+        match_all   = true
+        action      = "inc"
+      }
+    }
+    stage.label_drop {
+      values = ["iface"]
+    }
+  }
+
+  // ── dnsmasq DHCP: "DHCPACK(igb0) 192.168.4.28 aa:bb:cc:dd:ee:ff hostname".
+  // DISCOVER lines have no IP and some have no hostname, hence the optional groups.
+  // Counter opnsense_dhcp_messages_total{dhcp_msg, iface}; lease details = metadata.
+  stage.match {
+    selector = "{program=~\"dnsmasq.*\"} |~ \"DHCP[A-Z]+\\\\(\""
+    stage.regex {
+      expression = `(?P<dhcp_msg>DHCP[A-Z]+)\((?P<iface>[^)]+)\)(?: (?P<host_ip>[0-9.]+))?(?: (?P<mac>[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}))?(?: (?P<hostname>\S+))?`
+    }
+    stage.structured_metadata {
+      values = { dhcp_msg = "", iface = "", host_ip = "", mac = "", hostname = "" }
+    }
+    stage.labels {
+      values = { dhcp_msg = "", iface = "" }
+    }
+    stage.metrics {
+      metric.counter {
+        name        = "dhcp_messages_total"
+        prefix      = "opnsense_"
+        description = "dnsmasq DHCP messages by type and interface."
+        match_all   = true
+        action      = "inc"
+      }
+    }
+    stage.label_drop {
+      values = ["dhcp_msg", "iface"]
+    }
+  }
+
+  // Everything else (wireguard, audit, configd, dpinger, ...) passes through with only
+  // the program label — enable those apps under System › Settings › Logging › Remote.
   forward_to = [loki.write.local.receiver]
 }
 
@@ -110,6 +218,24 @@ loki.process "dns" {
   // "qname", not "domain": domain is already a stream label (NPM pipeline).
   stage.structured_metadata {
     values = { client = "", qname = "", qtype = "", rcode = "", cached = "" }
+  }
+
+  // opnsense_dns_replies_total{rcode,cached} -> VictoriaMetrics (NXDOMAIN/SERVFAIL rates,
+  // cache hit ratio from the logs). Labels promoted only for the counter, then dropped.
+  stage.labels {
+    values = { rcode = "", cached = "" }
+  }
+  stage.metrics {
+    metric.counter {
+      name        = "dns_replies_total"
+      prefix      = "opnsense_"
+      description = "Unbound replies by rcode and cache hit."
+      match_all   = true
+      action      = "inc"
+    }
+  }
+  stage.label_drop {
+    values = ["rcode", "cached"]
   }
   forward_to = [loki.write.local.receiver]
 }

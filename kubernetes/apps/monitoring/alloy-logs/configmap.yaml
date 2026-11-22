@@ -40,6 +40,15 @@ data:
       forward_to = [loki.write.default.receiver]
     }
 
+    // Kubernetes events (scheduling failures, BackOff, OOMKilling, probe failures, evictions).
+    // They only live ~1h in the API, so ship them to Loki. logfmt lines; stream labels
+    // job="kubernetes-events", namespace=<involved object ns>. Query with `| logfmt`.
+    loki.source.kubernetes_events "events" {
+      job_name   = "kubernetes-events"
+      log_format = "logfmt"
+      forward_to = [loki.write.default.receiver]
+    }
+
     loki.write "default" {
       endpoint {
         url = "http://192.168.4.66:3100/loki/api/v1/push"

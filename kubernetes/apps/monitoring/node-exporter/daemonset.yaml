@@ -1,0 +1,74 @@
+# Per-node OS metrics for the Talos nodes (filesystem /var = local-path PVCs + images,
+# NIC throughput, PSI pressure, load, hwmon temps). cAdvisor only gives CPU/mem per cgroup.
+# Scraped by vmagent's `kubernetes-node-exporter` job (Running pods only, so sleeping WOL
+# nodes don't produce down targets). Same version as the LXC node-exporters.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: node-exporter
+  annotations:
+    ignore-check.kube-linter.io/host-network: "node-exporter must see the node's real network interfaces"
+    ignore-check.kube-linter.io/sensitive-host-mounts: "read-only /, /proc, /sys mounts = host stats"
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.13.1   # multi-arch (arm64 for RPi4)
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            - --web.listen-address=:9100
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|host|var/lib/kubelet/pods|var/lib/containerd|system)($|/)
+            - --collector.filesystem.fs-types-exclude=^(autofs|cgroup2?|configfs|devpts|devtmpfs|fusectl|mqueue|nsfs|overlay|proc|pstore|securityfs|squashfs|sysfs|tmpfs|tracefs)$
+            - --collector.netclass.ignored-devices=^(veth.*|cni.*|flannel.*|dummy.*|kube-ipvs.*|lo)$
+            - --collector.netdev.device-exclude=^(veth.*|cni.*|flannel.*|dummy.*|kube-ipvs.*|lo)$
+          ports:
+            - { name: metrics, containerPort: 9100 }
+          readinessProbe:
+            httpGet: { path: /, port: 9100 }
+          livenessProbe:
+            httpGet: { path: /, port: 9100 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: proc, mountPath: /host/proc, readOnly: true }
+            - { name: sys,  mountPath: /host/sys,  readOnly: true }
+            - { name: root, mountPath: /host/root, readOnly: true, mountPropagation: HostToContainer }
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+      volumes:
+        - { name: proc, hostPath: { path: /proc } }
+        - { name: sys,  hostPath: { path: /sys } }
+        - { name: root, hostPath: { path: / } }

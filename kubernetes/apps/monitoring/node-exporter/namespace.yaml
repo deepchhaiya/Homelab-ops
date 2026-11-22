@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: node-exporter
+  labels:
+    # node-exporter needs hostNetwork (real NIC stats) and read-only hostPath mounts
+    # of / /proc /sys. That breaks the baseline PodSecurity profile Talos enforces, so
+    # this namespace is privileged. Only the node-exporter DaemonSet runs here; the
+    # rest of monitoring stays on baseline. Same pattern as the beszel namespace.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
