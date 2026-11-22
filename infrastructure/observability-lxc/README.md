@@ -141,6 +141,17 @@ type, so the phone can mute or prioritise each type separately:
 - Tokens are Gotify **app** tokens and live in `.env.enc.yaml`. Grafana expands them from
   the container env at provisioning time, so restart grafana after changing them.
 - A new rule needs a `category` label, or it falls through to Infrastructure.
+- Coverage (35 rules, `rules.yaml`):
+  - **kubernetes**: nodes, pods, workloads, OOM, Flux, failed Jobs, kubelet certs, error-log spikes.
+  - **network**: gateway down/loss/latency, pf states, services, CPU temp, disk, memory, and
+    "OPNsense logs stopped arriving" (catches broken remote syslog).
+  - **infra**: exporters, disk full (85% warn / 95% crit / full within 24h), external DAS/USB
+    mount missing, read-only filesystem, memory, sustained CPU heat (95 °C for 1 h), disk
+    temperature, SMART failure and bad sectors, failed systemd units, overdue backups, and
+    stale textfile metrics (the backup/SMART collectors stopped).
+  - **security**: Suricata severity 1–2.
+- Not covered: Grafana/CT405 itself. If it dies, nothing alerts. An outside heartbeat
+  (e.g. n8n on the RPi pinging `:3000/api/health`) would close that gap.
 - Gotify retention for these apps (90 d) is set in `../home-ops-lxc/gotify/prune.py`.
 
 Test: Grafana › Alerting › Contact points › each `grafana-*` › **Test**.

@@ -429,6 +429,77 @@ groups:
           summary: 'Scrape job {{ $labels.job }} is down: its dashboards and alerts are blind (opnsense-api = exporter up but OPNsense API key/permissions failing)'
           description: 'Dashboards and alerts built on this job are blind until it is back. opnsense-api = exporter up but API key/permissions failing.'
 
+      - uid: k8s-job-failed
+        title: K8s Job failed
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (namespace, job_name) (kube_job_status_failed)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: kubernetes
+        annotations:
+          summary: 'Job {{ $labels.namespace }}/{{ $labels.job_name }} failed'
+          description: 'kubectl -n {{ $labels.namespace }} logs job/{{ $labels.job_name }}. Delete the failed Job after fixing, or this keeps firing.'
+      - uid: k8s-kubelet-cert-expiring
+        title: Kubelet client certificate expiring
+        condition: C
+        for: 1h
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'min(kubelet_certificate_manager_client_ttl_seconds) / 86400'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [14]
+              refId: C
+        labels:
+          severity: warning
+          category: kubernetes
+        annotations:
+          summary: 'Kubelet client certificate expires in {{ printf "%.0f" $values.A.Value }} days'
+          description: 'Talos rotates these on its own, so rotation is stuck. Check kubelet logs: talosctl -n <node> logs kubelet | grep -i cert.'
+
   # --- OPNsense (opnsense-exporter API metrics) ---
   - orgId: 1
     name: opnsense-alerts
@@ -580,3 +651,645 @@ groups:
           summary: 'OPNsense service {{ $labels.description }} ({{ $labels.name }}) is stopped'
           description: 'OPNsense System > Diagnostics > Services: start it and check its log.'
           dashboardUid: opnsense-health
+      - uid: opnsense-logs-stopped
+        title: OPNsense logs stopped arriving
+        condition: C
+        for: 15m
+        noDataState: Alerting
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: loki
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'sum(count_over_time({job="opnsense", program="filterlog"}[15m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              refId: C
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: 'No OPNsense filterlog lines in Loki for 15m: firewall/IDS log alerts and dashboards are blind'
+          description: 'OPNsense System > Settings > Logging > Remote (target enabled?), then Alloy on CT405: docker compose logs alloy | tail.'
+      - uid: opnsense-cpu-hot
+        title: OPNsense CPU hot
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max(opnsense_temperature_celsius{type="cpu"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [85]
+              refId: C
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: 'OPNsense CPU at {{ printf "%.0f" $values.A.Value }}°C'
+          description: 'Check the box airflow; Suricata or a traffic flood can also pin the CPU (OPNsense Health dashboard).'
+          dashboardUid: opnsense-health
+      - uid: opnsense-disk-filling
+        title: OPNsense disk filling
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max(disk_used_percent{job="telegraf-opnsense", path="/"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [80]
+              refId: C
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: 'OPNsense root filesystem {{ printf "%.0f" $values.A.Value }}% full'
+          description: 'Usually local logs or Suricata EVE: System > Settings > Logging (retention), Services > Intrusion Detection > log rotation.'
+      - uid: opnsense-memory-high
+        title: OPNsense memory high
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max(mem_used_percent{job="telegraf-opnsense"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [90]
+              refId: C
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: 'OPNsense memory {{ printf "%.0f" $values.A.Value }}% used'
+          description: 'Diagnostics > Activity, sorted by RES. Suricata rule sets and Unbound cache are the big consumers.'
+          dashboardUid: opnsense-health
+      - uid: opnsense-wan-latency-high
+        title: WAN latency high
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (name) (opnsense_gateways_rtt_milliseconds)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [100]
+              refId: C
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: 'Gateway {{ $labels.name }} RTT {{ printf "%.0f" $values.A.Value }} ms (normal < 10 ms)'
+          description: 'ISP congestion or a LAN device saturating the uplink: OPNsense Firewall dashboard, top talkers.'
+          dashboardUid: opnsense-health
+
+  # --- Hosts, disks, backups (node-exporter + textfile collectors on evox2/peladn/LXCs) ---
+  # LXCs share the host kernel and bind-mounted disks, so a DAS problem can show on both
+  # home-ops-lxc and media-ai-ops-lxc; the infra route groups them into one message.
+  - orgId: 1
+    name: host-alerts
+    folder: Homelab
+    interval: 1m
+    rules:
+      - uid: host-disk-filling
+        title: Host disk filling
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, mountpoint) (100 * (1 - node_filesystem_avail_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"} / node_filesystem_size_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"})) < 95'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [85]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} {{ $labels.mountpoint }} is {{ printf "%.0f" $values.A.Value }}% full'
+          description: 'du -xh --max-depth=2 {{ $labels.mountpoint }} | sort -h | tail. Usual suspects: docker images (docker system df), logs, old backups.'
+      - uid: host-disk-full
+        title: Host disk almost full
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, mountpoint) (100 * (1 - node_filesystem_avail_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"} / node_filesystem_size_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"}))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [95]
+              refId: C
+        labels:
+          severity: critical
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} {{ $labels.mountpoint }} is {{ printf "%.0f" $values.A.Value }}% full: writes will start failing'
+          description: 'Free space now: docker system prune, journalctl --vacuum-size=200M, or move data off {{ $labels.mountpoint }}.'
+      - uid: host-disk-full-in-24h
+        title: Host disk full within 24h
+        condition: C
+        for: 1h
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, mountpoint) (predict_linear(node_filesystem_avail_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"}[6h], 86400) < 0 and on (host, mountpoint) (100 * (1 - node_filesystem_avail_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"} / node_filesystem_size_bytes{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"})) > 70)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} {{ $labels.mountpoint }} will be full within 24h at the current write rate'
+          description: 'Something is writing fast: check recent big files (find {{ $labels.mountpoint }} -xdev -mmin -360 -size +500M) and runaway logs.'
+      - uid: external-disk-missing
+        title: External disk mount missing
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: '(3 - count by (host) (node_filesystem_size_bytes{job=~"node-(home-ops|media-ai-ops)-lxc", mountpoint=~"/mnt/(das|sg-ext-hdd|wd-ext-hdd)"})) or on (host) (3 * max by (host) (up{job=~"node-(home-ops|media-ai-ops)-lxc"}))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: critical
+          category: infra
+        annotations:
+          summary: '{{ printf "%.0f" $values.A.Value }} of 3 external mounts (DAS / USB HDDs) missing on {{ $labels.host }}'
+          description: 'USB/DAS disconnect? On peladn: lsblk, dmesg -T | grep -iE "usb|uas|reset" | tail -30. Re-mount, then restart the LXC so its bind mounts come back.'
+      - uid: filesystem-readonly
+        title: Filesystem went read-only
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, mountpoint) (node_filesystem_readonly{job=~"node-.*", fstype=~"ext4|xfs|btrfs|zfs"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: critical
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} {{ $labels.mountpoint }} is mounted READ-ONLY (I/O errors?)'
+          description: 'The kernel remounts read-only after disk errors. dmesg -T | grep -iE "error|xfs|ext4" | tail, then check SMART before remounting.'
+      - uid: host-memory-low
+        title: Host memory low
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'min by (host) (100 * node_memory_MemAvailable_bytes{job=~"node-.*"} / node_memory_MemTotal_bytes{job=~"node-.*"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [10]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} has only {{ printf "%.0f" $values.A.Value }}% memory available'
+          description: 'Top consumers: ps aux --sort=-rss | head (or docker stats --no-stream). The OOM killer is next.'
+      - uid: host-cpu-hot
+        title: Host running hot
+        condition: C
+        for: 1h
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host) (node_hwmon_temp_celsius{job=~"node-(evox2|peladn)", chip!~"nvme.*"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [95]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} has been above 95°C for an hour ({{ printf "%.0f" $values.A.Value }}°C now)'
+          description: 'Short inference bursts near 100°C are normal on evox2; an hour is not. Stuck workload (Ollama, top) or blocked airflow/fan.'
+      - uid: disk-temperature-high
+        title: Disk temperature high
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, disk) (smartmon_temperature_celsius_raw_value) > 55 or max by (host, device) (nvme_temperature_celsius) > 75'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} disk {{ $labels.disk }}{{ $labels.device }} at {{ printf "%.0f" $values.A.Value }}°C'
+          description: 'HDD limit ~55°C, NVMe ~75°C. Check enclosure airflow/fan; long scrubs or backups heat the DAS.'
+      - uid: disk-smart-unhealthy
+        title: Disk SMART health failed
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, disk) (1 - smartmon_device_smart_healthy) or max by (host, device) (nvme_critical_warning)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: critical
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} disk {{ $labels.disk }}{{ $labels.device }} reports SMART FAILURE / critical warning'
+          description: 'The drive predicts its own failure. Check smartctl -a; make sure its data has a fresh backup, then replace it.'
+      - uid: disk-bad-sectors
+        title: Disk has bad sectors
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'sum by (host, disk) ({__name__=~"smartmon_(reallocated_sector_ct|current_pending_sector|offline_uncorrectable)_raw_value"}) or max by (host, device) (increase(nvme_media_errors_total[1d]))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.host }} disk {{ $labels.disk }}{{ $labels.device }}: {{ printf "%.0f" $values.A.Value }} reallocated/pending/uncorrectable sectors or new media errors'
+          description: 'Early sign of a dying disk. smartctl -a {{ $labels.disk }}; if the count grows, plan a replacement. Silence once acknowledged if it stays flat.'
+      - uid: systemd-unit-failed
+        title: systemd unit failed
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, name) (node_systemd_unit_state{job=~"node-.*", state="failed", name!="openipmi.service"})'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.name }} failed on {{ $labels.host }}'
+          description: 'systemctl status {{ $labels.name }}; journalctl -u {{ $labels.name }} -n 50. Fix, then systemctl reset-failed {{ $labels.name }}.'
+      - uid: backup-stale
+        title: Backup overdue
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, kind, name) (homelab_backup_age_seconds - homelab_backup_max_age_seconds) / 3600'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: 'Backup {{ $labels.name }} ({{ $labels.kind }}) is {{ printf "%.0f" $values.A.Value }}h past its max age'
+          description: 'pbs: check the backup job and task log in PBS. db-dump/etcd: systemctl list-timers on {{ $labels.host }} and the job journal.'
+      - uid: metrics-textfile-stale
+        title: Textfile metrics stale
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: victoriametrics
+            model:
+              datasource:
+                type: prometheus
+                uid: victoriametrics
+              expr: 'max by (host, file) (time() - node_textfile_mtime_seconds{job=~"node-.*"}) / 3600'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [3]
+              refId: C
+        labels:
+          severity: warning
+          category: infra
+        annotations:
+          summary: '{{ $labels.file }} on {{ $labels.host }} not refreshed for {{ printf "%.0f" $values.A.Value }}h: backup/SMART/apt alerts on it are blind'
+          description: 'The timer that writes it stopped: systemctl list-timers --all on {{ $labels.host }}, then the matching service journal.'
