@@ -116,7 +116,7 @@ services:
     restart: unless-stopped
     command:
       - --opnsense.protocol=https
-      - --opnsense.address=192.168.4.1
+      - --opnsense.address=192.168.4.1:3443   # OPNsense GUI/API port (not 443)
       - --opnsense.insecure            # OPNsense GUI uses its self-signed cert
       - --exporter.instance-label=opnsense
       - --web.listen-address=:8080
