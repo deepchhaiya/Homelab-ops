@@ -2057,7 +2057,7 @@
     },
     {
       "type": "row",
-      "title": "System logs",
+      "title": "DHCP (dnsmasq)",
       "id": 30,
       "collapsed": false,
       "gridPos": {
@@ -2065,6 +2065,210 @@
         "w": 24,
         "x": 0,
         "y": 61
+      },
+      "panels": [
+
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DHCP messages / min",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (dhcp_msg) (rate(opnsense_dhcp_messages_total[$__rate_interval])) * 60",
+          "legendFormat": "{{dhcp_msg}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "description": "NAK/DECLINE spikes = address conflict or rogue DHCP server; DISCOVERs without OFFERs = pool exhausted.",
+      "id": 31,
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 62
+      }
+    },
+    {
+      "type": "table",
+      "title": "Leases handed out (ACK)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "ACKs",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "host_ip": "IP",
+              "mac": "MAC",
+              "hostname": "Hostname",
+              "iface": "Iface",
+              "Value": "ACKs"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (host_ip, mac, hostname, iface) (count_over_time({job=\"opnsense\", program=~\"dnsmasq.*\"} | dhcp_msg=\"DHCPACK\" [$__range]))",
+          "queryType": "instant",
+          "format": "table"
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "h": 10,
+        "w": 10,
+        "x": 8,
+        "y": 62
+      }
+    },
+    {
+      "type": "logs",
+      "title": "dnsmasq log",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"opnsense\", program=~\"dnsmasq.*\"}",
+          "queryType": "range"
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 18,
+        "y": 62
+      }
+    },
+    {
+      "type": "row",
+      "title": "System logs",
+      "id": 34,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 72
       },
       "panels": [
 
@@ -2092,17 +2296,17 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"opnsense\", program!~\"filterlog|suricata|hostwatch\"} |~ \"(?i)(authentication|login|logged in|failed password|invalid user|accepted (password|publickey))\"",
+          "expr": "{job=\"opnsense\", program!~\"filterlog|suricata|hostwatch|dnsmasq.*\"} |~ \"(?i)(authentication|login|logged in|failed password|invalid user|accepted (password|publickey))\"",
           "queryType": "range"
         }
       ],
       "description": "Needs audit / sshd / lighttpd in System › Settings › Logging › Remote.",
-      "id": 31,
+      "id": 35,
       "gridPos": {
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 73
       }
     },
     {
@@ -2127,16 +2331,16 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"opnsense\", program=~\"wireguard|dpinger|configd.*|audit|kernel|kea.*|dhcp.*|unbound|monit\"}",
+          "expr": "{job=\"opnsense\", program=~\"wireguard|dpinger|configd.*|audit|kernel|unbound|monit\"}",
           "queryType": "range"
         }
       ],
-      "id": 32,
+      "id": 36,
       "gridPos": {
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 73
       }
     }
   ],
