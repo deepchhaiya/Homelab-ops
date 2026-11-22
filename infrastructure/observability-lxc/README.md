@@ -86,7 +86,14 @@ the rollout.
    (No Kea privilege: DHCP is dnsmasq, and the Kea collectors are disabled.)
 2. On that user, under **API keys**, click **+** to download `apikey.txt`.
 3. Put `key=` into `OPNSENSE_API_KEY` and `secret=` into `OPNSENSE_API_SECRET` with
-   `sops .env.enc.yaml`. Then `sops -d .env.enc.yaml > .env` on CT405. Delete the downloaded file.
+   `sops edit .env.enc.yaml` (on the Mac), then delete the downloaded file.
+   CT405 has no Age key, so decrypt on the Mac and pipe the plaintext in:
+   ```bash
+   git show origin/main:infrastructure/observability-lxc/.env.enc.yaml \
+     | sops -d --input-type yaml --output-type dotenv /dev/stdin \
+     | ssh evox2 'pct exec 405 -- sh -c "umask 077; cat > /root/Homelab-ops/infrastructure/observability-lxc/.env"'
+   ```
+   (`.env.enc.yaml` is a YAML map, so plain `sops -d` gives YAML that compose can't read.)
 4. Unbound DNS › Advanced: enable **Extended Statistics**.
 
 ## OPNsense remote logging (System › Settings › Logging › Remote)
@@ -104,8 +111,11 @@ Do this only on rules you care about: pass logging is high volume.
 ```bash
 # on CT405, after git pull
 docker compose run --rm --no-deps alloy fmt /etc/alloy/config.alloy   # syntax check before restart
-docker compose up -d                       # starts opnsense-exporter (VM reloads scrape.yaml itself)
-docker compose restart alloy grafana       # bind-mounted config: alloy pipeline, new dashboards + alert rules
+docker compose up -d                       # (re)creates services whose compose definition changed
+# Single-file bind mounts (scrape.yaml, loki.yaml, config.alloy) keep pointing at the OLD
+# file after `git pull` (git replaces the file, the mount holds the old inode), and
+# VictoriaMetrics' configCheckInterval rereads that stale copy. Restart whatever changed:
+docker compose restart victoriametrics alloy grafana   # + loki if loki.yaml changed
 curl -s localhost:8428/api/v1/targets | grep -o '"job":"[a-z-]*","health":"[a-z]*"' | sort -u
 ```
 
