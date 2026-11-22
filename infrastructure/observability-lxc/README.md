@@ -42,8 +42,8 @@ VictoriaMetrics/Loki stay internal-only.
 
 ## Secrets
 
-No secrets committed. `GRAFANA_ADMIN_PASSWORD` lives in a gitignored `.env` (or SOPS
-`.env.enc.yaml`). Everything else is non-sensitive config.
+No secrets committed. `GRAFANA_ADMIN_PASSWORD` and the five `GOTIFY_TOKEN_*` alert
+tokens live in a gitignored `.env`, decrypted from SOPS `.env.enc.yaml`. Everything else is non-sensitive config.
 
 ## Dashboards (provisioned from `grafana/provisioning/dashboards/json`)
 
@@ -118,6 +118,32 @@ docker compose up -d                       # (re)creates services whose compose 
 docker compose restart victoriametrics alloy grafana   # + loki if loki.yaml changed
 curl -s localhost:8428/api/v1/targets | grep -o '"job":"[a-z-]*","health":"[a-z]*"' | sort -u
 ```
+
+## Alerting (`grafana/provisioning/alerting/`)
+
+Every rule in `rules.yaml` carries `severity` (critical|warning) and `category`
+(kubernetes|network|infra|security). `policies.yaml` routes them to one Gotify app per
+type, so the phone can mute or prioritise each type separately:
+
+| Match (first wins) | Contact point → Gotify app | Token variable | Night mute 23:00–07:00 |
+|---|---|---|---|
+| `severity=critical` | grafana-critical → Grafana · Critical (prio 8) | `GOTIFY_TOKEN_CRITICAL` | no |
+| `category=security` | grafana-security → Grafana · Security (prio 7) | `GOTIFY_TOKEN_SECURITY` | no |
+| `category=kubernetes` | grafana-kubernetes → Grafana · Kubernetes (prio 5) | `GOTIFY_TOKEN_KUBERNETES` | yes |
+| `category=network` | grafana-network → Grafana · Network (prio 5) | `GOTIFY_TOKEN_NETWORK` | yes |
+| `category=infra` / anything else | grafana-infra → Grafana · Infrastructure (prio 4) | `GOTIFY_TOKEN_INFRA` | yes |
+
+- `templates.yaml` formats the message: summary, the `description` hint (the first thing
+  to check), start time, dashboard link and silence link. Firing alerts in a group are
+  collapsed into one message (`[FIRING x3] …`).
+- `mute-timings.yaml` defines `night` (America/Chicago). Muted alerts aren't dropped: they
+  are sent at 07:00 if they're still firing.
+- Tokens are Gotify **app** tokens and live in `.env.enc.yaml`. Grafana expands them from
+  the container env at provisioning time, so restart grafana after changing them.
+- A new rule needs a `category` label, or it falls through to Infrastructure.
+- Gotify retention for these apps (90 d) is set in `../home-ops-lxc/gotify/prune.py`.
+
+Test: Grafana › Alerting › Contact points › each `grafana-*` › **Test**.
 
 ## Next (Tier 2)
 
