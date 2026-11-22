@@ -12,7 +12,7 @@ systemd timer runs it daily at 04:30 Central.
 | 7 | Miniflux Curator Deals, Filtered Deals, Miniflux Randoms |
 | 14 | miniflux-curator (curator summaries) |
 | 30 | Beszel-Monitoring, Hindsight Memory Notifications, n8n HA workflows, RSS Feeds, Hermes ssh_exec, Job Application |
-| 90 | Grafana · * alert apps, n8n Errors, n8n Backup Worflow Notifications, Gmail Summaries, and any app not listed |
+| 90 | Grafana · * alert apps, Homelab Watchdog (n8n), n8n Errors, n8n Backup Worflow Notifications, Gmail Summaries, and any app not listed |
 
 Retention matches on the **exact app name**. If you rename an app in Gotify, rename it
 here too, or the app falls back to 90 days.

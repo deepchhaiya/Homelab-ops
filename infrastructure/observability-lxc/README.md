@@ -150,8 +150,12 @@ type, so the phone can mute or prioritise each type separately:
     temperature, SMART failure and bad sectors, failed systemd units, overdue backups, and
     stale textfile metrics (the backup/SMART collectors stopped).
   - **security**: Suricata severity 1–2.
-- Not covered: Grafana/CT405 itself. If it dies, nothing alerts. An outside heartbeat
-  (e.g. n8n on the RPi pinging `:3000/api/health`) would close that gap.
+- Grafana can't alert about itself. The n8n **Monitoring Watchdog**
+  (`kubernetes/apps/n8n/workflows/monitoring-watchdog.json`, on the RPi4) probes Grafana,
+  VictoriaMetrics, Loki and Gotify every 5 min and alerts via Gotify, or Gmail if Gotify
+  is the one down. In return, Grafana's *Monitoring exporter down* rule covers `up{job="n8n"}`.
+- Loki's `/ready` can stay 503 ("waiting for 15s after being ready") while Loki works.
+  Probe `/loki/api/v1/labels` instead.
 - Gotify retention for these apps (90 d) is set in `../home-ops-lxc/gotify/prune.py`.
 
 Test: Grafana › Alerting › Contact points › each `grafana-*` › **Test**.

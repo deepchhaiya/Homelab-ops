@@ -41,6 +41,7 @@ RETENTION_DAYS = {
     "Grafana · Kubernetes": 90,
     "Grafana · Network": 90,
     "Grafana · Infrastructure": 90,
+    "Homelab Watchdog": 90,
     "n8n Errors": 90,
     "n8n Backup Worflow Notifications": 90,
     "Gmail Summaries": 90,
