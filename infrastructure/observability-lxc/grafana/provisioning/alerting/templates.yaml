@@ -1,0 +1,27 @@
+apiVersion: 1
+
+# Gotify notification text, used by every contact point in contactpoints.yaml.
+#   title:   [FIRING x3] K8s container restarting repeatedly
+#   message: one bullet per alert: summary, optional description, start time, dashboard
+#            link; resolved alerts listed after; one silence link at the end.
+# Kept free of $-variables: Grafana expands $NAME in provisioning files.
+# Times render in the Grafana container's TZ (America/Chicago, set in docker-compose).
+templates:
+  - orgId: 1
+    name: gotify
+    template: |
+      {{ define "gotify.title" -}}
+      [{{ .Status | toUpper }}{{ if gt (len .Alerts.Firing) 1 }} x{{ len .Alerts.Firing }}{{ end }}] {{ .CommonLabels.alertname }}
+      {{- end }}
+
+      {{ define "gotify.message" -}}
+      {{ range .Alerts.Firing -}}
+      • {{ or .Annotations.summary .Labels.alertname }}
+      {{ if .Annotations.description }}  {{ .Annotations.description }}
+      {{ end }}  since {{ .StartsAt.Local.Format "Mon Jan 2 15:04" }}{{ if .DashboardURL }} · {{ .DashboardURL }}{{ end }}
+      {{ end -}}
+      {{ range .Alerts.Resolved -}}
+      ✓ {{ or .Annotations.summary .Labels.alertname }} (resolved {{ .EndsAt.Local.Format "15:04" }})
+      {{ end -}}
+      {{ if .Alerts.Firing }}Silence: {{ (index .Alerts.Firing 0).SilenceURL }}{{ end }}
+      {{- end }}
