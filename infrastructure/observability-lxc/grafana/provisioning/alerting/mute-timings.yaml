@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Quiet hours for warning-level alerts (used by the kubernetes/network/infra routes in
+# policies.yaml). Critical and security alerts are never muted. A range can't cross
+# midnight, hence two ranges.
+muteTimes:
+  - orgId: 1
+    name: night
+    time_intervals:
+      - times:
+          - start_time: '23:00'
+            end_time: '24:00'
+          - start_time: '00:00'
+            end_time: '07:00'
+        location: 'America/Chicago'

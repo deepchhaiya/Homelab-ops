@@ -52,7 +52,13 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_ALERT_GOTIFY_TOKEN=${GF_ALERT_GOTIFY_TOKEN:-}   # Gotify app token for the alert contact point (set in .env)
+      - TZ=America/Chicago   # alert message timestamps (templates.yaml) render in local time
+      # One Gotify app token per alert category (contactpoints.yaml); set in .env (SOPS).
+      - GOTIFY_TOKEN_CRITICAL=${GOTIFY_TOKEN_CRITICAL:-}
+      - GOTIFY_TOKEN_SECURITY=${GOTIFY_TOKEN_SECURITY:-}
+      - GOTIFY_TOKEN_KUBERNETES=${GOTIFY_TOKEN_KUBERNETES:-}
+      - GOTIFY_TOKEN_NETWORK=${GOTIFY_TOKEN_NETWORK:-}
+      - GOTIFY_TOKEN_INFRA=${GOTIFY_TOKEN_INFRA:-}
       # Public URL so alert/notification links resolve to NPM, not localhost:3000
       - GF_SERVER_DOMAIN=grafana.dkghar.duckdns.org
       - GF_SERVER_ROOT_URL=https://grafana.dkghar.duckdns.org

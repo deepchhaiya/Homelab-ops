@@ -40,8 +40,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: 'Cluster panic/fatal/CrashLoop log lines spiking (last 10m)'
+          description: 'Kubernetes Workloads dashboard, Logs panel, search panic|fatal for the namespace.'
 
       # --- Metric-based: any node-exporter scrape target down (uses VictoriaMetrics) ---
       # NoData here means VM itself is sick — DO fire that. ExecErr also fires.
@@ -76,8 +78,10 @@ groups:
               refId: C
         labels:
           severity: critical
+          category: infra
         annotations:
           summary: 'A node-exporter target is DOWN ({{ $labels.host }})'
+          description: 'Is the host up? ssh to it and check systemctl status prometheus-node-exporter (or the node-exporter container).'
 
   # --- Suricata IDS (OPNsense EVE JSON via syslog -> Alloy -> Loki) ---
   # Severity 1-2 only; sev 3 is internet scan noise (Zmap etc.) — see the Suricata dashboard.
@@ -121,6 +125,7 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: security
           source: suricata
         annotations:
           summary: '[sev {{ $labels.alert_severity }}] {{ $labels.alert_signature }} from {{ $labels.src_ip }} -> port {{ $labels.dest_port }} ({{ $values.A }} hits / 5m)'
@@ -165,8 +170,10 @@ groups:
               refId: C
         labels:
           severity: critical
+          category: kubernetes
         annotations:
           summary: 'Node {{ $labels.node }} is NotReady but not cordoned (not a WOL sleep)'
+          description: 'kubectl describe node; talosctl -n <node IP> service kubelet / dmesg. Sleeping WOL nodes are excluded, so this one should be awake.'
           dashboardUid: k8s-cluster
       - uid: k8s-pod-crashlooping
         title: K8s container restarting repeatedly
@@ -199,8 +206,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: '{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) restarted {{ $values.A }} times in 15m'
+          description: 'kubectl -n <ns> logs <pod> --previous; Kubernetes Workloads dashboard shows the last termination reason.'
           dashboardUid: k8s-workloads
       - uid: k8s-container-oomkilled
         title: K8s container OOMKilled
@@ -233,8 +242,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: '{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOMKilled: raise its memory limit'
+          description: 'Raise resources.limits.memory in the manifest, or check Memory vs limit on Kubernetes Cluster for a leak.'
           dashboardUid: k8s-workloads
       # DaemonSet pods parked Pending on sleeping WOL nodes are excluded.
       - uid: k8s-pod-not-healthy
@@ -268,8 +279,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: '{{ $labels.namespace }}/{{ $labels.pod }} not running for 15m'
+          description: 'kubectl -n <ns> describe pod: look at Events (scheduling, image pull, PVC).'
           dashboardUid: k8s-cluster
       - uid: k8s-workload-degraded
         title: K8s workload below desired replicas
@@ -302,8 +315,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: '{{ $labels.namespace }}/{{ $labels.deployment }}{{ $labels.statefulset }} is missing {{ $values.A }} replica(s)'
+          description: 'kubectl -n <ns> get pods: a pod is not Ready; check its events and logs.'
           dashboardUid: k8s-cluster
       - uid: k8s-node-var-full
         title: K8s node /var filling up
@@ -336,8 +351,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: '{{ $labels.node }} /var is {{ printf "%.0f" $values.A.Value }}% full (local-path PVCs + images); kubelet evicts at ~90%'
+          description: 'Usually images or local-path PVCs. talosctl -n <node IP> image prune, or move a PVC.'
           dashboardUid: k8s-cluster
       - uid: flux-not-ready
         title: Flux resource not Ready
@@ -370,8 +387,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: kubernetes
         annotations:
           summary: 'Flux {{ $labels.customresource_kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} is failing to reconcile'
+          description: 'flux get all -A; flux logs --level=error. Usually a bad manifest in the last merge.'
           dashboardUid: k8s-cluster
       # Exporters other alerts depend on. (node-* LXC exporters are covered by scrape-target-down.)
       - uid: monitoring-exporter-down
@@ -405,8 +424,10 @@ groups:
               refId: C
         labels:
           severity: critical
+          category: infra
         annotations:
           summary: 'Scrape job {{ $labels.job }} is down: its dashboards and alerts are blind (opnsense-api = exporter up but OPNsense API key/permissions failing)'
+          description: 'Dashboards and alerts built on this job are blind until it is back. opnsense-api = exporter up but API key/permissions failing.'
 
   # --- OPNsense (opnsense-exporter API metrics) ---
   - orgId: 1
@@ -446,8 +467,10 @@ groups:
               refId: C
         labels:
           severity: critical
+          category: network
         annotations:
           summary: 'Gateway {{ $labels.name }} is offline (dpinger)'
+          description: 'WAN down or the monitor IP (8.8.8.8) unreachable. Check modem/ISP; OPNsense Health dashboard.'
           dashboardUid: opnsense-health
       - uid: opnsense-gateway-loss
         title: OPNsense gateway packet loss
@@ -480,8 +503,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: network
         annotations:
           summary: 'Gateway {{ $labels.name }} losing {{ $values.A }}% of probes for 10m'
+          description: 'Upstream congestion or a flaky modem link. Compare with the speedtest panel on OPNsense Network.'
           dashboardUid: opnsense-health
       - uid: opnsense-pf-states-high
         title: OPNsense pf state table filling
@@ -514,8 +539,10 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: network
         annotations:
           summary: 'pf state table at {{ printf "%.0f" $values.A.Value }}% of limit: new connections will be dropped at 100%'
+          description: 'A device opening huge numbers of connections. OPNsense Firewall, Top LAN clients table.'
           dashboardUid: opnsense-health
       - uid: opnsense-service-stopped
         title: OPNsense service stopped
@@ -548,6 +575,8 @@ groups:
               refId: C
         labels:
           severity: warning
+          category: network
         annotations:
           summary: 'OPNsense service {{ $labels.description }} ({{ $labels.name }}) is stopped'
+          description: 'OPNsense System > Diagnostics > Services: start it and check its log.'
           dashboardUid: opnsense-health

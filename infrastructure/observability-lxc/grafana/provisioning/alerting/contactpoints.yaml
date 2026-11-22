@@ -1,26 +1,84 @@
 apiVersion: 1
 
-# Gotify via its message API. Grafana's webhook body carries top-level `title` + `message`,
-# which Gotify reads directly. Token comes from $GF_ALERT_GOTIFY_TOKEN (set in CT405 .env),
-# so it never lands in the repo.
+# One Gotify application per alert category, so each one has its own inbox, its own
+# phone notification channel and its own default priority (set on the Gotify app;
+# Grafana's webhook body carries no priority, so Gotify applies the app default):
+#
+#   Gotify app               priority  gets
+#   Grafana · Critical          8      every severity=critical alert (any category)
+#   Grafana · Security          7      Suricata IDS (category=security)
+#   Grafana · Kubernetes        5      K8s / Flux warnings
+#   Grafana · Network           5      OPNsense warnings (gateway loss, pf states, services)
+#   Grafana · Infrastructure    4      hosts, exporters, everything else
+#
+# Tokens come from CT405 .env (SOPS .env.enc.yaml) and never land in the repo.
+# The body's `title` and `message` come from templates.yaml; Gotify reads them directly.
 contactPoints:
   - orgId: 1
-    name: gotify
+    name: grafana-critical
     receivers:
-      - uid: gotify_webhook
+      - uid: gotify_critical
         type: webhook
         settings:
-          url: https://notifications.dkghar.duckdns.org/message?token=$GF_ALERT_GOTIFY_TOKEN
+          url: https://notifications.dkghar.duckdns.org/message?token=$GOTIFY_TOKEN_CRITICAL
           httpMethod: POST
+          title: '{{ template "gotify.title" . }}'
+          message: '{{ template "gotify.message" . }}'
         disableResolveMessage: false
 
-  # Same Gotify app, but no "RESOLVED" follow-ups: an IDS hit is a one-off event, not a state.
+  # IDS hits are one-off events, not states: no "RESOLVED" follow-ups.
   - orgId: 1
-    name: gotify-ids
+    name: grafana-security
     receivers:
-      - uid: gotify_ids_webhook
+      - uid: gotify_security
         type: webhook
         settings:
-          url: https://notifications.dkghar.duckdns.org/message?token=$GF_ALERT_GOTIFY_TOKEN
+          url: https://notifications.dkghar.duckdns.org/message?token=$GOTIFY_TOKEN_SECURITY
           httpMethod: POST
+          title: '{{ template "gotify.title" . }}'
+          message: '{{ template "gotify.message" . }}'
         disableResolveMessage: true
+
+  - orgId: 1
+    name: grafana-kubernetes
+    receivers:
+      - uid: gotify_kubernetes
+        type: webhook
+        settings:
+          url: https://notifications.dkghar.duckdns.org/message?token=$GOTIFY_TOKEN_KUBERNETES
+          httpMethod: POST
+          title: '{{ template "gotify.title" . }}'
+          message: '{{ template "gotify.message" . }}'
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: grafana-network
+    receivers:
+      - uid: gotify_network
+        type: webhook
+        settings:
+          url: https://notifications.dkghar.duckdns.org/message?token=$GOTIFY_TOKEN_NETWORK
+          httpMethod: POST
+          title: '{{ template "gotify.title" . }}'
+          message: '{{ template "gotify.message" . }}'
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: grafana-infra
+    receivers:
+      - uid: gotify_infra
+        type: webhook
+        settings:
+          url: https://notifications.dkghar.duckdns.org/message?token=$GOTIFY_TOKEN_INFRA
+          httpMethod: POST
+          title: '{{ template "gotify.title" . }}'
+          message: '{{ template "gotify.message" . }}'
+        disableResolveMessage: false
+
+# The old single-app contact points (their token matched no Gotify app, so nothing was
+# ever delivered). Removing them from this file alone would leave them in Grafana.
+deleteContactPoints:
+  - orgId: 1
+    uid: gotify_webhook
+  - orgId: 1
+    uid: gotify_ids_webhook

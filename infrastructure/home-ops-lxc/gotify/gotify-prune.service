@@ -1,0 +1,11 @@
+[Unit]
+Description=Prune old Gotify messages (per-app retention, see prune.py)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# GOTIFY_PRUNE_TOKEN lives in the home-ops compose .env (from SOPS .env.enc.yaml).
+EnvironmentFile=/root/Homelab-ops/infrastructure/home-ops-lxc/.env
+ExecStart=/usr/bin/python3 /root/Homelab-ops/infrastructure/home-ops-lxc/gotify/prune.py --apply
+Nice=10
