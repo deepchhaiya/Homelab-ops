@@ -1,0 +1,334 @@
+{
+  "name": "Monitoring Watchdog (Grafana/CT405 + Gotify)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "ea2c9f46-781e-4245-b285-00b5c30aa896",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.4.66:3000/api/health",
+        "options": {
+          "timeout": 10000,
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "f31abcff-2553-4bd1-b61b-6ae5618dbbe4",
+      "name": "Grafana health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.4.66:8428/health",
+        "options": {
+          "timeout": 10000,
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "3a26bf71-93da-4cbc-994f-704a0d15678d",
+      "name": "VictoriaMetrics health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.4.66:3100/loki/api/v1/labels?since=15m",
+        "options": {
+          "timeout": 10000,
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "e2451500-48ff-492c-bc75-24f4f461a92b",
+      "name": "Loki query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "https://notifications.dkghar.duckdns.org/health",
+        "options": {
+          "timeout": 10000,
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "94a2e689-4b92-4442-a5e0-6cbfecbd316e",
+      "name": "Gotify health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Outside watchdog for the monitoring stack. Grafana can't alert about itself, so n8n\n// (RPi4, separate hardware) probes it. 2 misses in a row (~10 min) = DOWN; one message on\n// down, one on recovery, a reminder every ~6 h while still down. State lives in workflow\n// static data, which only persists for ACTIVE (scheduled) runs, not manual test runs.\nconst sd = $getWorkflowStaticData('global');\nsd.svc = sd.svc || {};\nconst STRIKES = 2;\nconst REMIND_EVERY = 72; // runs (5 min each) = 6 h\n\nconst checks = [\n  { key: 'grafana', name: 'Grafana (CT405)', node: 'Grafana health',\n    ok: r => r.statusCode === 200 && /\"database\"\\s*:\\s*\"ok\"/.test(String(r.body)) },\n  { key: 'victoriametrics', name: 'VictoriaMetrics (CT405)', node: 'VictoriaMetrics health',\n    ok: r => r.statusCode === 200 },\n  // Loki's /ready can sit at 503 (\"waiting for 15s after being ready\") while it is working\n  // fine, so probe a real label query instead.\n  { key: 'loki', name: 'Loki (CT405)', node: 'Loki query',\n    ok: r => r.statusCode === 200 && /\"status\"\\s*:\\s*\"success\"/.test(String(r.body)) },\n  { key: 'gotify', name: 'Gotify (CT203)', node: 'Gotify health',\n    ok: r => r.statusCode === 200 && /\"health\"\\s*:\\s*\"green\"/.test(String(r.body)) },\n];\n\nconst fmt = iso => new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });\nconst now = new Date().toISOString();\nconst down = [], back = [], still = [];\nconst healthy = {};\n\nfor (const c of checks) {\n  let r = {};\n  try { r = $(c.node).first().json || {}; } catch (e) { r = { error: { message: 'no output' } }; }\n  const ok = !r.error && c.ok(r);\n  healthy[c.key] = ok;\n  const s = sd.svc[c.key] || { fails: 0, down: false, since: null };\n  if (ok) {\n    if (s.down) back.push(`✓ ${c.name} is back (down since ${fmt(s.since)})`);\n    sd.svc[c.key] = { fails: 0, down: false, since: null };\n    continue;\n  }\n  s.fails += 1;\n  const why = r.error ? (r.error.message || r.error.code || 'request failed') : `HTTP ${r.statusCode}`;\n  if (!s.down && s.fails >= STRIKES) {\n    s.down = true; s.since = now;\n    down.push(`• ${c.name}: ${why}`);\n  } else if (s.down && (s.fails - STRIKES) % REMIND_EVERY === 0) {\n    still.push(`• ${c.name} still down since ${fmt(s.since)}: ${why}`);\n  }\n  sd.svc[c.key] = s;\n}\n\nif (!down.length && !back.length && !still.length) return [];\n\nconst anyDown = down.length || still.length;\nconst title = down.length ? `[DOWN] Monitoring watchdog: ${down.map(l => l.split(':')[0].slice(2)).join(', ')}`\n  : still.length ? '[STILL DOWN] Monitoring watchdog'\n  : '[RESOLVED] Monitoring watchdog';\nconst lines = [...down, ...still, ...back];\nif (anyDown) {\n  lines.push('');\n  lines.push('While this lasts, Grafana alerts may not be delivered.');\n  if (!healthy.grafana || !healthy.victoriametrics || !healthy.loki)\n    lines.push(\"Check CT405: ssh evox2 'pct exec 405 -- docker ps -a' (then docker compose logs <svc> in /root/Homelab-ops/infrastructure/observability-lxc).\");\n  if (!healthy.gotify)\n    lines.push(\"Check CT203: ssh peladn 'pct exec 203 -- docker ps -a' (gotify) and the NPM proxy for notifications.\");\n}\nlines.push('', '(from the n8n watchdog on the RPi4)');\n\nreturn [{ json: { title, message: lines.join('\\n'), priority: anyDown ? 8 : 4, gotifyUp: healthy.gotify } }];\n"
+      },
+      "id": "83a810de-6c56-4375-a7e5-e001d97534fb",
+      "name": "Evaluate (2-strike + recovery)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "3dcea734-62e2-4819-90cf-cff73999d9b2",
+              "leftValue": "={{ $json.gotifyUp }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "208e999f-7099-4306-9ad8-6a500a9809be",
+      "name": "Gotify up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "additionalFields": {
+          "priority": "={{ $json.priority }}",
+          "title": "={{ $json.title }}"
+        },
+        "options": {}
+      },
+      "id": "82a10cad-3e52-48ba-98c7-c974b06e3af3",
+      "name": "Gotify: Homelab Watchdog",
+      "type": "n8n-nodes-base.gotify",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -100
+      ],
+      "credentials": {
+        "gotifyApi": {
+          "id": "",
+          "name": "Gotify Homelab Watchdog"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL_HERE",
+        "subject": "={{ $json.title }} (Gotify unreachable)",
+        "emailType": "text",
+        "message": "={{ $json.message }}",
+        "options": {}
+      },
+      "id": "536daddf-336f-4ac1-bd84-753c00e174a8",
+      "name": "Email (Gotify is down)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        100
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "NjjRMI255p7BYuNO",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Monitoring watchdog\nGrafana can't alert about its own death, so this probes CT405 (Grafana, VictoriaMetrics, Loki) and Gotify every 5 min from the RPi4.\n\n- 2 misses in a row (~10 min) = DOWN, then one message, a reminder every ~6 h, and one on recovery.\n- Delivery: Gotify app **Homelab Watchdog** (priority 8); falls back to Gmail when Gotify itself is down.\n- The reverse direction: Grafana's *Monitoring exporter down* rule fires if n8n's /metrics (job n8n) disappears.\n- Counters live in workflow static data: they only persist on scheduled (active) runs.",
+        "height": 300,
+        "width": 520
+      },
+      "id": "fd46353c-d9b0-4292-9f1d-2585af781b10",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "Grafana health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grafana health": {
+      "main": [
+        [
+          {
+            "node": "VictoriaMetrics health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VictoriaMetrics health": {
+      "main": [
+        [
+          {
+            "node": "Loki query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loki query": {
+      "main": [
+        [
+          {
+            "node": "Gotify health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gotify health": {
+      "main": [
+        [
+          {
+            "node": "Evaluate (2-strike + recovery)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate (2-strike + recovery)": {
+      "main": [
+        [
+          {
+            "node": "Gotify up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gotify up?": {
+      "main": [
+        [
+          {
+            "node": "Gotify: Homelab Watchdog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email (Gotify is down)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "errorWorkflow": "6BhhF0XpgnlXoyap"
+  },
+  "tags": []
+}

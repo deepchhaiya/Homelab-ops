@@ -99,6 +99,10 @@ spec:
               value: "n8n"
             - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
               value: "false"
+            # Prometheus /metrics on :5678, scraped by vmagent (job n8n) so Grafana can
+            # alert when n8n, which runs the Grafana/CT405 watchdog, is itself down.
+            - name: N8N_METRICS
+              value: "true"
             - name: DB_POSTGRESDB_PASSWORD
               valueFrom:
                 secretKeyRef:

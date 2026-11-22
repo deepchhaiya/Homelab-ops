@@ -409,7 +409,7 @@ groups:
               datasource:
                 type: prometheus
                 uid: victoriametrics
-              expr: 'min by (job) (up{job=~"kube-state-metrics|apiserver|coredns|opnsense-exporter|alloy-observability|telegraf-opnsense"}) or label_replace(min(opnsense_up), "job", "opnsense-api", "", "")'
+              expr: 'min by (job) (up{job=~"kube-state-metrics|apiserver|coredns|opnsense-exporter|alloy-observability|telegraf-opnsense|n8n"}) or label_replace(min(opnsense_up), "job", "opnsense-api", "", "")'
               instant: true
               refId: A
           - refId: C
@@ -426,7 +426,7 @@ groups:
           severity: critical
           category: infra
         annotations:
-          summary: 'Scrape job {{ $labels.job }} is down: its dashboards and alerts are blind (opnsense-api = exporter up but OPNsense API key/permissions failing)'
+          summary: 'Scrape job {{ $labels.job }} is down: its dashboards and alerts are blind (n8n = the outside watchdog for Grafana is down too)'
           description: 'Dashboards and alerts built on this job are blind until it is back. opnsense-api = exporter up but API key/permissions failing.'
 
       - uid: k8s-job-failed
