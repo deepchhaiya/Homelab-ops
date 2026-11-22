@@ -930,6 +930,28 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last handshake (ago)"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "never / not connected",
+                        "color": "text"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -1012,7 +1034,7 @@
           "format": "table"
         }
       ],
-      "description": "Handshake age: works whether the API reports an epoch or an age. A peer handshakes every ~2 min while traffic flows.",
+      "description": "Handshake age: works whether the API reports an epoch or an age. A peer handshakes every ~2 min while traffic flows. A handshake of 0 means the peer has not connected since the tunnel came up (shown as never).",
       "id": 14,
       "gridPos": {
         "h": 8,
