@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-22T22:50:20.064Z",
+  "updatedAt": "2026-11-22T23:38:33.356Z",
   "createdAt": "2026-11-22T20:22:22.812Z",
   "id": "N2Pzuk1KWDxCkb9E",
   "name": "Monitoring Watchdog (Grafana/CT405 + Gotify)",
@@ -214,9 +214,9 @@
     },
     {
       "parameters": {
-        "content": "## Monitoring watchdog\nGrafana can't alert about itself, so every 5 min this probes Grafana, VictoriaMetrics, Loki (CT405) and Gotify (CT203) from the RPi4.\n\n- **Confirm:** a failed probe is re-checked after 3 min. Only a service failing both times counts as down.\n- **State:** remembers which services are down (workflow static data).\n  - New outage: one **[DOWN]** message\n  - Still down: silent, **[STILL DOWN]** reminder every 6 h\n  - Back up: one **[RESOLVED]** message\n- **Delivery:** Gotify app *Homelab Watchdog* (prio 8); Gmail when Gotify itself is down.\n- **Reverse check:** Grafana's *Monitoring exporter down* rule fires if n8n's /metrics (job `n8n`) disappears.\n- **Testing:** manual runs don't save state, so a manual run during an outage always sends [DOWN].\n- Workflow timeout is 6 min (3 min wait + up to 4×10 s probes, twice).",
-        "height": 420,
-        "width": 560
+        "content": "## Monitoring watchdog\nGrafana can't alert about itself, so every 5 min this probes Grafana, VictoriaMetrics, Loki (CT405) and Gotify (CT203) from the RPi4.\n\n- **Confirm:** a failed probe is re-checked after 3 min. Only a service failing both times counts as down.\n- **State:** Data table `watchdog_state` (one row, key=state) remembers which services were alerted. Read before *Probe failure*, saved by *Save state* after the final pass. Not static data: n8n drops static-data changes made after a Wait over 65 s.\n  - New outage: one **[DOWN]** message\n  - Still down: silent, **[STILL DOWN]** reminder every 6 h\n  - Back up: cleared silently (no resolved message)\n- **Delivery:** Gotify app *Homelab Watchdog* (prio 8); Gmail when Gotify itself is down.\n- **Reverse check:** Grafana's *Monitoring exporter down* rule fires if n8n's /metrics (job `n8n`) disappears.\n- **Reset:** set the row's value to `{}` to forget all outages.\n- Workflow timeout is 6 min (3 min wait + up to 4×10 s probes, twice).",
+        "height": 460,
+        "width": 580
       },
       "id": "52afba84-ed20-434f-ac8d-d76e9e24e9a3",
       "name": "Sticky Note",
@@ -304,7 +304,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// HELPER: Safely parse JSON strings (when HTTP node returns raw text)\n// ============================================================================\nfunction parseBody(data) {\n  if (typeof data === 'string') {\n    try {\n      return JSON.parse(data);\n    } catch {\n      return data;\n    }\n  }\n  return data;\n}\n\nconst fmt = (ms) =>\n  new Date(ms).toLocaleString('en-US', {\n    timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',\n  });\n\n// ============================================================================\n// SERVICE DEFINITIONS & HEALTH VALIDATION RULES\n// ============================================================================\nconst checks = [\n  {\n    key: 'grafana',\n    name: 'Grafana (CT405)',\n    node: 'Grafana health',\n    validate: (r) => r.statusCode === 200 && parseBody(r.data)?.database === 'ok',\n  },\n  {\n    key: 'victoriametrics',\n    name: 'VictoriaMetrics (CT405)',\n    node: 'VictoriaMetrics health',\n    validate: (r) => r.statusCode === 200 && String(r.data).trim() === 'OK',\n  },\n  {\n    key: 'loki',\n    name: 'Loki (CT405)',\n    node: 'Loki query',\n    validate: (r) => {\n      const body = parseBody(r.data);\n      return r.statusCode === 200 && (body?.status === 'success' || Array.isArray(body?.data));\n    },\n  },\n  {\n    key: 'gotify',\n    name: 'Gotify (CT203)',\n    node: 'Gotify health',\n    validate: (r) => {\n      const body = parseBody(r.data);\n      return r.statusCode === 200 && body?.health === 'green' && body?.database === 'green';\n    },\n  },\n];\n\n// ============================================================================\n// STATE: which services we already alerted about, kept between scheduled runs.\n// { down: { grafana: { since: <ms>, lastSent: <ms> }, ... } }\n// (n8n only saves static data on scheduled/active runs, not manual test runs.)\n// ============================================================================\nconst state = $getWorkflowStaticData('global');\nstate.down = state.down || {};\nconst REMIND_MS = 6 * 60 * 60 * 1000; // reminder while still down: every 6 h\n\n// ============================================================================\n// 1. WHICH PASS IS THIS? ($runIndex: 0 = first probe, 1 = re-check after Wait)\n// ============================================================================\nconst isSecondRun = $runIndex >= 1;\nlet failedProbe1 = {};\nif (isSecondRun) {\n  try {\n    failedProbe1 = $('Probe failure').first(0, 0).json.failedProbe1 || {};\n  } catch {\n    failedProbe1 = {};\n  }\n}\n\n// ============================================================================\n// 2. EVALUATE CURRENT HEALTH CHECKS\n// ============================================================================\nconst healthy = {};\nconst currentFailures = {};\nfor (const c of checks) {\n  let r = {};\n  try {\n    // .last() reads the latest loop execution of each HTTP node\n    r = $(c.node).last().json || {};\n  } catch {\n    r = { error: { message: 'no output' } };\n  }\n  const ok = !r.error && c.validate(r);\n  healthy[c.key] = ok;\n  if (!ok) {\n    currentFailures[c.key] = r.error\n      ? r.error.message || r.error.code || 'request failed'\n      : `HTTP ${r.statusCode}`;\n  }\n}\n\n// First pass and something failed: wait 3 min and re-check before deciding anything.\nif (!isSecondRun && Object.keys(currentFailures).length > 0) {\n  return [{ json: { runPass: 1, shouldWait: true, anyDown: true, shouldNotify: false, failedProbe1: currentFailures } }];\n}\n\n// ============================================================================\n// 3. FINAL PASS: compare confirmed outages with the saved state\n// ============================================================================\n// Confirmed = failed on both passes (on a clean first pass there are none).\nconst confirmed = {};\nfor (const key of Object.keys(currentFailures)) {\n  if (failedProbe1[key]) confirmed[key] = currentFailures[key];\n}\n\nconst now = Date.now();\nconst newlyDown = [];\nconst stillDown = [];\nconst recovered = [];\n\nfor (const c of checks) {\n  const was = state.down[c.key];\n  if (confirmed[c.key]) {\n    if (!was) {\n      state.down[c.key] = { since: now, lastSent: now };\n      newlyDown.push(c);\n    } else if (now - was.lastSent >= REMIND_MS) {\n      was.lastSent = now;\n      stillDown.push(c);\n    }\n  } else if (was && healthy[c.key]) {\n    delete state.down[c.key];\n    recovered.push({ ...c, since: was.since });\n  }\n}\n\nconst shouldNotify = newlyDown.length + stillDown.length + recovered.length > 0;\nconst names = (list) => list.map((c) => c.name).join(', ');\n\nconst title = newlyDown.length\n  ? `[DOWN] ${names(newlyDown)}`\n  : stillDown.length\n    ? `[STILL DOWN] ${names(stillDown)}`\n    : `[RESOLVED] ${names(recovered)}`;\n\nconst lines = [\n  ...newlyDown.map((c) => `• ${c.name}: ${confirmed[c.key]}`),\n  ...stillDown.map((c) => `• ${c.name} still down since ${fmt(state.down[c.key].since)}: ${confirmed[c.key]}`),\n  ...recovered.map((c) => `✓ ${c.name} is back (down since ${fmt(c.since)})`),\n];\nif (newlyDown.length || stillDown.length) {\n  lines.push('', 'While this lasts, Grafana alerts may not be delivered.');\n  if (!healthy.grafana || !healthy.victoriametrics || !healthy.loki) {\n    lines.push(\"Check CT405: ssh evox2 'pct exec 405 -- docker ps -a' (then docker compose logs <svc> in /root/Homelab-ops/infrastructure/observability-lxc).\");\n  }\n  if (!healthy.gotify) {\n    lines.push(\"Check CT203: ssh peladn 'pct exec 203 -- docker ps -a' (gotify) and the NPM proxy for notifications.\");\n  }\n}\nlines.push('', '(from the n8n watchdog on the RPi4)');\n\nreturn [{\n  json: {\n    runPass: $runIndex + 1,\n    shouldWait: false,\n    anyDown: Object.keys(confirmed).length > 0,\n    shouldNotify,\n    gotifyUp: healthy.gotify,\n    title,\n    message: lines.join('\\n'),\n    priority: newlyDown.length || stillDown.length ? 8 : 4,\n    failedProbe1,\n    down: Object.keys(state.down),\n  },\n}];\n"
+        "jsCode": "// ============================================================================\n// HELPER: Safely parse JSON strings (when HTTP node returns raw text)\n// ============================================================================\nfunction parseBody(data) {\n  if (typeof data === 'string') {\n    try {\n      return JSON.parse(data);\n    } catch {\n      return data;\n    }\n  }\n  return data;\n}\n\nconst fmt = (ms) =>\n  new Date(ms).toLocaleString('en-US', {\n    timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',\n  });\n\n// ============================================================================\n// SERVICE DEFINITIONS & HEALTH VALIDATION RULES\n// ============================================================================\nconst checks = [\n  {\n    key: 'grafana',\n    name: 'Grafana (CT405)',\n    node: 'Grafana health',\n    validate: (r) => r.statusCode === 200 && parseBody(r.data)?.database === 'ok',\n  },\n  {\n    key: 'victoriametrics',\n    name: 'VictoriaMetrics (CT405)',\n    node: 'VictoriaMetrics health',\n    validate: (r) => r.statusCode === 200 && String(r.data).trim() === 'OK',\n  },\n  {\n    key: 'loki',\n    name: 'Loki (CT405)',\n    node: 'Loki query',\n    validate: (r) => {\n      const body = parseBody(r.data);\n      return r.statusCode === 200 && (body?.status === 'success' || Array.isArray(body?.data));\n    },\n  },\n  {\n    key: 'gotify',\n    name: 'Gotify (CT203)',\n    node: 'Gotify health',\n    validate: (r) => {\n      const body = parseBody(r.data);\n      return r.statusCode === 200 && body?.health === 'green' && body?.database === 'green';\n    },\n  },\n];\n\n// ============================================================================\n// STATE: services already alerted, from Data table \"watchdog_state\" (row key=state).\n// { grafana: { since: <ms>, lastSent: <ms> }, ... }. Saved by \"Save state\" after the\n// final pass. (Not static data: n8n drops static-data changes made after a long Wait.)\n// ============================================================================\nlet state = {};\ntry {\n  state = JSON.parse($('Read state').last().json.value || '{}') || {};\n} catch {\n  state = {};\n}\nconst REMIND_MS = 6 * 60 * 60 * 1000; // reminder while still down: every 6 h\n\n// ============================================================================\n// 1. WHICH PASS IS THIS? ($runIndex: 0 = first probe, 1 = re-check after the Wait)\n// ============================================================================\nconst isSecondRun = $runIndex >= 1;\nlet failedProbe1 = {};\nif (isSecondRun) {\n  try {\n    failedProbe1 = $('Probe failure').first(0, 0).json.failedProbe1 || {};\n  } catch {\n    failedProbe1 = {};\n  }\n}\n\n// ============================================================================\n// 2. EVALUATE CURRENT HEALTH CHECKS\n// ============================================================================\nconst healthy = {};\nconst currentFailures = {};\nfor (const c of checks) {\n  let r = {};\n  try {\n    // .last() reads the latest loop execution of each HTTP node\n    r = $(c.node).last().json || {};\n  } catch {\n    r = { error: { message: 'no output' } };\n  }\n  const ok = !r.error && c.validate(r);\n  healthy[c.key] = ok;\n  if (!ok) {\n    currentFailures[c.key] = r.error\n      ? r.error.message || r.error.code || 'request failed'\n      : `HTTP ${r.statusCode}`;\n  }\n}\n\n// First pass and something failed: wait and re-check before deciding anything.\nif (!isSecondRun && Object.keys(currentFailures).length > 0) {\n  return [{ json: { runPass: 1, shouldWait: true, anyDown: true, shouldNotify: false, failedProbe1: currentFailures } }];\n}\n\n// ============================================================================\n// 3. FINAL PASS: compare confirmed outages with the saved state\n// ============================================================================\n// Confirmed = failed on both passes (on a clean first pass there are none).\nconst confirmed = {};\nfor (const key of Object.keys(currentFailures)) {\n  if (failedProbe1[key]) confirmed[key] = currentFailures[key];\n}\n\nconst now = Date.now();\nconst newlyDown = [];\nconst stillDown = [];\n\nfor (const c of checks) {\n  const was = state[c.key];\n  if (confirmed[c.key]) {\n    if (!was) {\n      state[c.key] = { since: now, lastSent: now };\n      newlyDown.push(c);\n    } else if (now - was.lastSent >= REMIND_MS) {\n      was.lastSent = now;\n      stillDown.push(c);\n    }\n  } else if (was && healthy[c.key]) {\n    delete state[c.key]; // back up: forget it silently (no resolved message)\n  }\n}\n\nconst shouldNotify = newlyDown.length + stillDown.length > 0;\nconst names = (list) => list.map((c) => c.name).join(', ');\n\nconst lines = [\n  ...newlyDown.map((c) => `• ${c.name}: ${confirmed[c.key]}`),\n  ...stillDown.map((c) => `• ${c.name} still down since ${fmt(state[c.key].since)}: ${confirmed[c.key]}`),\n];\nif (shouldNotify) {\n  lines.push('', 'While this lasts, Grafana alerts may not be delivered.');\n  if (!healthy.grafana || !healthy.victoriametrics || !healthy.loki) {\n    lines.push(\"Check CT405: ssh evox2 'pct exec 405 -- docker ps -a' (then docker compose logs <svc> in /root/Homelab-ops/infrastructure/observability-lxc).\");\n  }\n  if (!healthy.gotify) {\n    lines.push(\"Check CT203: ssh peladn 'pct exec 203 -- docker ps -a' (gotify) and the NPM proxy for notifications.\");\n  }\n}\nlines.push('', '(from the n8n watchdog on the RPi4)');\n\nreturn [{\n  json: {\n    runPass: $runIndex + 1,\n    shouldWait: false,\n    anyDown: Object.keys(confirmed).length > 0,\n    shouldNotify,\n    gotifyUp: healthy.gotify,\n    title: newlyDown.length ? `[DOWN] ${names(newlyDown)}` : `[STILL DOWN] ${names(stillDown)}`,\n    message: lines.join('\\n'),\n    priority: 8,\n    failedProbe1,\n    stateJson: JSON.stringify(state),\n    down: Object.keys(state),\n  },\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -329,6 +329,98 @@
       "id": "cc08ed7b-7cbd-49a8-8c67-4634450b6048",
       "name": "Wait 3 Minutes",
       "webhookId": "0eba88d7-d19a-4ee4-8105-711071fd6baf"
+    },
+    {
+      "id": "c4bd3143-f024-4ddd-b409-ec41c0ab66b7",
+      "name": "Read state",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        984,
+        -176
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "132enkYIHmEeQ2nq",
+          "cachedResultName": "watchdog_state"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "state"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "6169bfa3-2819-4b93-9f29-ca4c6237b411",
+      "name": "Save state",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        -208
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "132enkYIHmEeQ2nq",
+          "cachedResultName": "watchdog_state"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "state"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "state",
+            "value": "={{ $json.stateJson }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
     }
   ],
   "connections": {
@@ -376,17 +468,6 @@
         ]
       ]
     },
-    "Gotify health": {
-      "main": [
-        [
-          {
-            "node": "Probe failure",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Gotify up?": {
       "main": [
         [
@@ -417,6 +498,11 @@
         [
           {
             "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save state",
             "type": "main",
             "index": 0
           }
@@ -455,6 +541,28 @@
           }
         ]
       ]
+    },
+    "Gotify health": {
+      "main": [
+        [
+          {
+            "node": "Read state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read state": {
+      "main": [
+        [
+          {
+            "node": "Probe failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -463,49 +571,18 @@
     "timeSavedMode": "fixed",
     "errorWorkflow": "6BhhF0XpgnlXoyap",
     "callerPolicy": "workflowsFromSameOwner",
-    "executionTimeout": 15,
-    "availableInMCP": false
+    "executionTimeout": 360,
+    "availableInMCP": true
   },
-  "staticData": {
-    "node:Every 5 min": {
-      "recurrenceRules": [
-        null
-      ],
-      "recurrenceRuleSignatures": [
-        null
-      ]
-    },
-    "global": {
-      "svc": {
-        "grafana": {
-          "fails": 27,
-          "down": true,
-          "since": "2026-11-22T20:33:06.319Z"
-        },
-        "victoriametrics": {
-          "fails": 0,
-          "down": false,
-          "since": null
-        },
-        "loki": {
-          "fails": 27,
-          "down": true,
-          "since": "2026-11-22T20:33:06.319Z"
-        },
-        "gotify": {
-          "fails": 27,
-          "down": true,
-          "since": "2026-11-22T20:33:06.319Z"
-        }
-      }
-    }
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
   },
-  "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "f03decac-d63a-430d-9254-25bed929d835",
-  "activeVersionId": "f03decac-d63a-430d-9254-25bed929d835",
-  "versionCounter": 231,
+  "versionId": "b2827ec1-5a4a-4152-800e-12cebe01a1a9",
+  "activeVersionId": "b2827ec1-5a4a-4152-800e-12cebe01a1a9",
+  "versionCounter": 240,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],
@@ -530,7 +607,7 @@
     }
   ],
   "versionMetadata": {
-    "name": "modified trigger time",
-    "description": "triiger time 5 mins"
+    "name": "Probe failure reads/writes Data table state; sticky note",
+    "description": "Updated nodes: Sticky Note, Probe failure"
   }
 }
