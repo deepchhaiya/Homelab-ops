@@ -49,6 +49,10 @@ spec:
                   key: AGENT_PASSWORD
             - name: COLLECTIONS
               value: crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve
+            # Whitelists normal Nextcloud client traffic (sync 404s/PROPFIND)
+            # so desktop/mobile clients don't trip http-probing and get banned.
+            - name: PARSERS
+              value: crowdsecurity/nextcloud-whitelist
           volumeMounts:
             - name: acquis
               # Mount only the file: the entrypoint rsyncs defaults into
