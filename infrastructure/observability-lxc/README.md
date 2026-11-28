@@ -56,6 +56,23 @@ tokens live in a gitignored `.env`, decrypted from SOPS `.env.enc.yaml`. Everyth
 | **Kubernetes Cluster** | kubelet/cAdvisor + kube-state-metrics + node-exporter + apiserver + CoreDNS + events | `kubectl top nodes/pods` equivalents, requests vs allocatable, unhealthy pods, restarts, OOM reasons, PVCs, control plane, Flux, warning events, error-log rates |
 | **Kubernetes Workloads** | same + pod logs | per namespace/pod: CPU/mem vs request/limit, throttling, restarts, events, logs with search |
 | Homelab Backups | textfile metrics | backup freshness |
+| **Proxmox** | PVE built-in metric server (InfluxDB line protocol → VM `:8428`) | per host: CPU, memory, load, IO wait, NICs, swap, root disk, last seen; per guest: status, CPU, memory, LXC disk, net/disk IO, PSI; storages: used/free/state |
+
+### Proxmox metric server
+
+Each PVE host pushes to VictoriaMetrics through Datacenter → Metric Server (`/etc/pve/status.cfg`,
+not in git): type InfluxDB, HTTP, server `192.168.4.66`, port `8428`. VictoriaMetrics ignores the
+organization and bucket fields. Labels:
+
+- Host series (`object="nodes"`): `host` is the PVE node name. `prop` = peladn, `pve` = evox2,
+  `dkghar-server` = i9 (WOL, often silent), plus `dell-r610` and `proi`.
+- Guest series (`object="qemu|lxc"`): `host` = guest name, `nodename`, `vmid`. VM IDs repeat across
+  nodes, so always key on `nodename` + `vmid`.
+- Storage series (`object="storages"`): `host` = storage name, `nodename`, `type`.
+- Text fields (`status`, `name`, `tags`) arrive as `0`; use `system_uptime > 0` for "running".
+- `system_*` names overlap with OPNsense Telegraf; filter on `object`.
+- Host node-exporters stay: alert rules use them for temps, SMART/NVMe, systemd, read-only
+  mounts and backup ages, none of which the PVE metric server sends.
 
 `kubectl top` reads metrics-server, which keeps only the latest sample in memory. The
 Grafana "top" panels read the same kubelet/cAdvisor data from VictoriaMetrics, with 90 d
